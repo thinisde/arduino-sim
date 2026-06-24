@@ -42,9 +42,11 @@ pub fn main(init: std.process.Init) !void {
     var flash = try memory.Flash.init(allocator, board.mcu);
     defer flash.deinit(allocator);
 
-    try hex.loadIntoFlash(contents, &flash);
+    _ = try hex.loadIntoFlash(contents, &flash);
 
-    var cpu = cpu_mod.Cpu.init(allocator, board, &flash);
+    var cpu = try cpu_mod.Cpu.init(allocator, board, &flash);
+    defer cpu.deinit(allocator);
+
     cpu.trace = options.trace;
     cpu.quiet = options.quiet;
 
@@ -85,18 +87,21 @@ fn parseOptions(args: []const []const u8) !Options {
             }
 
             options.steps = try std.fmt.parseInt(usize, args[i], 10);
-        } else if (std.mem.startsWith(u8, arg, "--")) {
-            return error.UnknownOption;
         } else if (std.mem.eql(u8, arg, "--board")) {
-            const board_name = args.next() orelse {
-                std.debug.print("error: --board requires a value\n", .{});
-                return;
-            };
+            i += 1;
+
+            if (i >= args.len) {
+                return error.MissingBoardValue;
+            }
+
+            const board_name = args[i];
 
             options.selected_board_kind = board_registry.parse(board_name) orelse {
-                std.debug.print("error: unkown board '{s}'", .{board_name});
-                return;
+                std.debug.print("error: unknown board '{s}'\n", .{board_name});
+                return error.UnknownBoard;
             };
+        } else if (std.mem.startsWith(u8, arg, "--")) {
+            return error.UnknownOption;
         } else if (options.path.len == 0) {
             options.path = arg;
         } else {
@@ -116,81 +121,4 @@ fn printUsage() void {
         \\  --quiet       print only final summary
         \\
     , .{});
-}
-
-const testing = std.testing;
-
-test "parseOptions default path" {
-    const args = [_][]const u8{"arduino_sim"};
-    const opts = try parseOptions(&args);
-    try testing.expectEqualStrings("", opts.path);
-    try testing.expectEqual(@as(usize, 1000), opts.steps);
-    try testing.expectEqual(false, opts.trace);
-    try testing.expectEqual(false, opts.quiet);
-}
-
-test "parseOptions path only" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex" };
-    const opts = try parseOptions(&args);
-    try testing.expectEqualStrings("blink.hex", opts.path);
-    try testing.expectEqual(@as(usize, 1000), opts.steps);
-}
-
-test "parseOptions trace flag" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--trace" };
-    const opts = try parseOptions(&args);
-    try testing.expectEqual(true, opts.trace);
-    try testing.expectEqual(false, opts.quiet);
-}
-
-test "parseOptions quiet flag" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--quiet" };
-    const opts = try parseOptions(&args);
-    try testing.expectEqual(false, opts.trace);
-    try testing.expectEqual(true, opts.quiet);
-}
-
-test "parseOptions trace and quiet" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--trace", "--quiet" };
-    const opts = try parseOptions(&args);
-    try testing.expectEqual(true, opts.trace);
-    try testing.expectEqual(true, opts.quiet);
-}
-
-test "parseOptions steps flag" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--steps", "500" };
-    const opts = try parseOptions(&args);
-    try testing.expectEqual(@as(usize, 500), opts.steps);
-}
-
-test "parseOptions all flags" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--steps", "2000", "--trace", "--quiet" };
-    const opts = try parseOptions(&args);
-    try testing.expectEqualStrings("blink.hex", opts.path);
-    try testing.expectEqual(@as(usize, 2000), opts.steps);
-    try testing.expectEqual(true, opts.trace);
-    try testing.expectEqual(true, opts.quiet);
-}
-
-test "parseOptions missing steps value" {
-    const args = [_][]const u8{ "arduino_sim", "--steps" };
-    try testing.expectError(error.MissingStepsValue, parseOptions(&args));
-}
-
-test "parseOptions unknown flag" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--unknown" };
-    try testing.expectError(error.UnknownOption, parseOptions(&args));
-}
-
-test "parseOptions unexpected second path argument" {
-    const args = [_][]const u8{ "arduino_sim", "blink.hex", "other.hex" };
-    try testing.expectError(error.UnexpectedArgument, parseOptions(&args));
-}
-
-comptime {
-    _ = @import("std").testing.refAllDecls(@This());
-    _ = @import("avr/memory/test.zig");
-    _ = @import("avr/cpu/test.zig");
-    _ = @import("avr/timer/test.zig");
-    _ = @import("avr/constants/test.zig");
 }

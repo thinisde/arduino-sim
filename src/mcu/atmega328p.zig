@@ -1,4 +1,5 @@
 const mcu = @import("spec.zig");
+const spec_mod = @import("spec.zig");
 
 pub const spec = mcu.McuSpec{
     .kind = .atmega328p,
@@ -71,36 +72,38 @@ pub const spec = mcu.McuSpec{
         .timer0_ovf_word_addr = 0x0020,
         .timer0_ovf_byte_addr = 0x0040,
     },
-    .gpio_ports = .{
-        .{
-            .id = .B,
-            .pin_io = 0x03,
-            .ddr_io = 0x04,
-            .port_io = 0x05,
+    .gpio_ports = &gpio_ports,
+};
 
-            .pin_data = 0x0023,
-            .ddr_data = 0x0024,
-            .port_data = 0x0025,
-        },
-        .{
-            .id = .C,
-            .pin_io = 0x06,
-            .ddr_io = 0x07,
-            .port_io = 0x08,
+pub const gpio_ports = [_]spec_mod.GpioPortSpec{
+    .{
+        .id = .B,
+        .pin_io = 0x03,
+        .ddr_io = 0x04,
+        .port_io = 0x05,
 
-            .pin_data = 0x0026,
-            .ddr_data = 0x0027,
-            .port_data = 0x0028,
-        },
-        .{
-            .id = .D,
-            .pin_io = 0x09,
-            .ddr_io = 0x0a,
-            .port_io = 0x0b,
+        .pin_data = 0x0023,
+        .ddr_data = 0x0024,
+        .port_data = 0x0025,
+    },
+    .{
+        .id = .C,
+        .pin_io = 0x06,
+        .ddr_io = 0x07,
+        .port_io = 0x08,
 
-            .pin_data = 0x0029,
-            .ddr_data = 0x002a,
-            .port_data = 0x002b,
-        },
+        .pin_data = 0x0026,
+        .ddr_data = 0x0027,
+        .port_data = 0x0028,
+    },
+    .{
+        .id = .D,
+        .pin_io = 0x09,
+        .ddr_io = 0x0a,
+        .port_io = 0x0b,
+
+        .pin_data = 0x0029,
+        .ddr_data = 0x002a,
+        .port_data = 0x002b,
     },
 };

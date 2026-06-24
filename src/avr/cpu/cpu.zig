@@ -16,7 +16,7 @@ pub const Cpu = struct {
     r: [32]u8 = [_]u8{0} ** 32,
     io: []u8,
     sram: []u8,
-    timer0: timer.Timer0 = .{},
+    timer0: timer.Timer0,
     gpio: ?*gpio_mod.Gpio = null,
     pc: u32 = 0,
 
@@ -26,7 +26,7 @@ pub const Cpu = struct {
     trace: bool = false,
     quiet: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, board: *const board_spec.BoardSpec, flash: *const memory.Flash) Cpu {
+    pub fn init(allocator: std.mem.Allocator, board: *const board_spec.BoardSpec, flash: *const memory.Flash) !Cpu {
         const io = try allocator.alloc(u8, board.mcu.io.size);
         errdefer allocator.free(io);
         @memset(io, 0);
@@ -38,6 +38,7 @@ pub const Cpu = struct {
         return Cpu{
             .mcu = board.mcu,
             .board = board,
+            .timer0 = timer.Timer0.init(board.mcu),
 
             .io = io,
             .sram = sram,
@@ -112,7 +113,7 @@ pub const Cpu = struct {
             return;
         }
 
-        if (self.timer0.writeIo(address, value) != null) {
+        if (self.timer0.writeIo(address, value)) {
             return;
         }
 
@@ -173,7 +174,7 @@ pub const Cpu = struct {
             return;
         }
 
-        if (self.timer0.writeData(address, value)) |_| {
+        if (self.timer0.writeData(address, value)) {
             return;
         }
 
@@ -343,7 +344,7 @@ pub const Cpu = struct {
 
         if (self.timer0.overflowInterruptPending()) {
             self.timer0.acceptOverflowInterrupt();
-            try self.fireInterrupt(self.mcu.vectors.timer1_ovf_word_addr);
+            try self.fireInterrupt(self.mcu.vectors.timer0_ovf_word_addr);
         }
     }
 
