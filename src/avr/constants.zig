@@ -17,6 +17,7 @@ pub const Cycles = struct {
     pub const nop = 1;
     pub const rjmp = 2;
     pub const jmp = 3;
+    pub const out = 1;
 };
 
 pub const Opcode = struct {
@@ -30,6 +31,9 @@ pub const Opcode = struct {
 
     pub const ldi_mask: u16 = 0xf000;
     pub const ldi_pattern: u16 = 0xe000;
+
+    pub const out_mask: u16 = 0xf800;
+    pub const out_pattern: u16 = 0xb800;
 };
 
 pub const Jmp = struct {
@@ -56,4 +60,23 @@ pub const Ldi = struct {
     pub const imm_high_shift = 4;
 
     pub const cycles = 1;
+};
+
+pub const Out = struct {
+    pub const io_low_mask: u16 = 0x000f;
+    pub const io_high_mask: u16 = 0x0600;
+    pub const io_high_shift = 5;
+
+    pub const register_mask: u16 = 0x01f0;
+    pub const reigster_shift = 4;
+};
+
+pub const Io = struct {
+    pub const size = 64;
+
+    pub const pinb: usize = 0x03;
+    pub const ddrb: usize = 0x04;
+    pub const portb: usize = 0x05;
+
+    pub const pb5_mask: u8 = 1 << 5;
 };

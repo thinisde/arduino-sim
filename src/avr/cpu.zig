@@ -6,7 +6,7 @@ pub const Cpu = struct {
     flash: *const memory.Flash,
 
     r: [32]u8 = [_]u8{0} ** 32,
-
+    io: [constants.Io.size]u8 = [_]u8{0} ** constants.Io.size,
     // AVR program counter as a WORD address.
     pc: u32 = 0,
 
@@ -36,6 +36,8 @@ pub const Cpu = struct {
             try self.execRjmp(opcode);
         } else if ((opcode & constants.Opcode.ldi_mask) == constants.Opcode.ldi_pattern) {
             try self.execLdi(opcode);
+        } else if ((opcode & constants.Opcode.out_mask) == constants.Opcode.out_pattern) {
+            try self.execOut(opcode);
         } else {
             std.debug.print("UNKNOWN\n", .{});
             return error.UnimplementedOpcode;
@@ -111,5 +113,50 @@ pub const Cpu = struct {
 
         self.pc += 1;
         self.cycles += constants.Ldi.cycles;
+    }
+
+    fn execOut(self: *Cpu, opcode: u16) !void {
+        const io_address = @as(usize, @intCast(opcode & constants.Out.io_low_mask)) | @as(usize, @intCast(
+            (opcode & constants.Out.io_high_mask) >> constants.Out.io_high_shift,
+        ));
+
+        const register_index = @as(usize, @intCast(
+            (opcode & constants.Out.register_mask) >> constants.Out.reigster_shift,
+        ));
+
+        const value = self.r[register_index];
+
+        try self.writeIo(io_address, value);
+
+        std.debug.print("OUT io[0x{x:0>2}] r{} ; value=0x{x:0>2}\n", .{ io_address, register_index, value });
+
+        self.pc += 1;
+        self.cycles += constants.Cycles.out;
+    }
+
+    fn writeIo(self: *Cpu, address: usize, value: u8) !void {
+        if (address >= self.io.len) {
+            return error.IoAddressOutOfRange;
+        }
+
+        self.io[address] = value;
+
+        if (address == constants.Io.ddrb) {
+            const is_output = (value & constants.Io.pb5_mask) != 0;
+
+            std.debug.print("   DDRB changed: 0b{b:0>8}\n", .{value});
+            std.debug.print("   Arduino D13 mode: {s}\n", .{
+                if (is_output) "OUTPUT" else "INPUT",
+            });
+        }
+
+        if (address == constants.Io.portb) {
+            const is_high = (value & constants.Io.pb5_mask) != 0;
+
+            std.debug.print("   PORTB changed: 0b{b:0>8}\n", .{value});
+            std.debug.print("   Arduino D13 mode: {s}\n", .{
+                if (is_high) "HIGH" else "LOW",
+            });
+        }
     }
 };
