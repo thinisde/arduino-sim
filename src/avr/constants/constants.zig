@@ -4,11 +4,7 @@ pub const Flash = struct {
 };
 
 pub const Sram = struct {
-    // AVR data memory starts with registers and IO, SRAM ends at 0x08ff.
     pub const size = 0x0900;
-
-    // ATmega328P SRAM ends at 0x08ff.
-    // The stack starts here and grows downward.
     pub const end: u16 = 0x08ff;
 };
 
@@ -373,11 +369,5 @@ pub const Timer0 = struct {
 };
 
 pub const InterruptVector = struct {
-    // ATmega328P vector entries are 2 words wide in this build because
-    // the vector table uses JMP instructions.
-    //
-    // TIMER0_OVF is vector 16:
-    // word address = 16 * 2 = 0x0020
-    // byte address = 0x0040
     pub const timer0_ovf_word: u16 = 0x0020;
 };

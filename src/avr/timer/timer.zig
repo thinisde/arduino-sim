@@ -1,5 +1,4 @@
-const constants = @import("constants.zig");
-const std = @import("std");
+const constants = @import("../constants/constants.zig");
 
 pub const Timer0 = struct {
     tccr0a: u8 = 0,

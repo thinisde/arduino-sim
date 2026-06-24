@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const memory = @import("avr/memory.zig");
+const memory = @import("avr/memory/memory.zig");
 const hex = @import("loader/hex.zig");
-const cpu_mod = @import("avr/cpu.zig");
+const cpu_mod = @import("avr/cpu/cpu.zig");
 
 const Options = struct {
     path: []const u8,
@@ -93,4 +93,81 @@ fn printUsage() void {
         \\  --quiet       print only final summary
         \\
     , .{});
+}
+
+const testing = std.testing;
+
+test "parseOptions default path" {
+    const args = [_][]const u8{"arduino_sim"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqualStrings("", opts.path);
+    try testing.expectEqual(@as(usize, 1000), opts.steps);
+    try testing.expectEqual(false, opts.trace);
+    try testing.expectEqual(false, opts.quiet);
+}
+
+test "parseOptions path only" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqualStrings("blink.hex", opts.path);
+    try testing.expectEqual(@as(usize, 1000), opts.steps);
+}
+
+test "parseOptions trace flag" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "--trace"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqual(true, opts.trace);
+    try testing.expectEqual(false, opts.quiet);
+}
+
+test "parseOptions quiet flag" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "--quiet"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqual(false, opts.trace);
+    try testing.expectEqual(true, opts.quiet);
+}
+
+test "parseOptions trace and quiet" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "--trace", "--quiet"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqual(true, opts.trace);
+    try testing.expectEqual(true, opts.quiet);
+}
+
+test "parseOptions steps flag" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "--steps", "500"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqual(@as(usize, 500), opts.steps);
+}
+
+test "parseOptions all flags" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "--steps", "2000", "--trace", "--quiet"};
+    const opts = try parseOptions(&args);
+    try testing.expectEqualStrings("blink.hex", opts.path);
+    try testing.expectEqual(@as(usize, 2000), opts.steps);
+    try testing.expectEqual(true, opts.trace);
+    try testing.expectEqual(true, opts.quiet);
+}
+
+test "parseOptions missing steps value" {
+    const args = [_][]const u8{"arduino_sim", "--steps"};
+    try testing.expectError(error.MissingStepsValue, parseOptions(&args));
+}
+
+test "parseOptions unknown flag" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "--unknown"};
+    try testing.expectError(error.UnknownOption, parseOptions(&args));
+}
+
+test "parseOptions unexpected second path argument" {
+    const args = [_][]const u8{"arduino_sim", "blink.hex", "other.hex"};
+    try testing.expectError(error.UnexpectedArgument, parseOptions(&args));
+}
+
+comptime {
+    _ = @import("std").testing.refAllDecls(@This());
+    _ = @import("avr/memory/test.zig");
+    _ = @import("avr/cpu/test.zig");
+    _ = @import("avr/timer/test.zig");
+    _ = @import("avr/constants/test.zig");
 }

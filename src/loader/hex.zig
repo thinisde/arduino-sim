@@ -1,5 +1,5 @@
 const std = @import("std");
-const memory = @import("../avr/memory.zig");
+const memory = @import("../avr/memory/memory.zig");
 
 fn parseHexByte(text: []const u8) !u8 {
     return try std.fmt.parseInt(u8, text, 16);
@@ -51,4 +51,60 @@ pub fn loadIntoFlash(contents: []const u8, flash: *memory.Flash) !usize {
     }
 
     return loaded_count;
+}
+
+const testing = @import("std").testing;
+
+test "loadIntoFlash basic data record" {
+    var flash = memory.Flash{};
+    const hex_data = ":100100000C9434000C9446000C9446000C94460061\n:00000001FF\n";
+
+    const count = try loadIntoFlash(hex_data, &flash);
+    try testing.expectEqual(@as(usize, 16), count);
+
+    try testing.expectEqual(@as(u8, 0x0c), try flash.readByte(0x0100));
+    try testing.expectEqual(@as(u8, 0x94), try flash.readByte(0x0101));
+    try testing.expectEqual(@as(u8, 0x34), try flash.readByte(0x0102));
+    try testing.expectEqual(@as(u8, 0x00), try flash.readByte(0x0103));
+
+    try testing.expectEqual(@as(u8, 0x0c), try flash.readByte(0x0104));
+    try testing.expectEqual(@as(u8, 0x94), try flash.readByte(0x0105));
+    try testing.expectEqual(@as(u8, 0x46), try flash.readByte(0x0106));
+    try testing.expectEqual(@as(u8, 0x00), try flash.readByte(0x0107));
+}
+
+test "loadIntoFlash empty file returns zero" {
+    var flash = memory.Flash{};
+    const count = try loadIntoFlash("", &flash);
+    try testing.expectEqual(@as(usize, 0), count);
+}
+
+test "loadIntoFlash only EOF record" {
+    var flash = memory.Flash{};
+    const count = try loadIntoFlash(":00000001FF\n", &flash);
+    try testing.expectEqual(@as(usize, 0), count);
+}
+
+test "loadIntoFlash ignores whitespace and empty lines" {
+    var flash = memory.Flash{};
+    const hex_data = "\n  :020000020000FC\n  :100100000C9434000C9446000C9446000C94460061\n:00000001FF\n";
+
+    const count = try loadIntoFlash(hex_data, &flash);
+    try testing.expectEqual(@as(usize, 16), count);
+}
+
+test "loadIntoFlash invalid line missing colon" {
+    var flash = memory.Flash{};
+    try testing.expectError(error.InvalidHexRecord, loadIntoFlash("00000001FF\n", &flash));
+}
+
+test "parseHexByte valid" {
+    try testing.expectEqual(@as(u8, 0x0c), try parseHexByte("0c"));
+    try testing.expectEqual(@as(u8, 0xff), try parseHexByte("FF"));
+    try testing.expectEqual(@as(u8, 0x94), try parseHexByte("94"));
+}
+
+test "parseHexU16 valid" {
+    try testing.expectEqual(@as(u16, 0x0100), try parseHexU16("0100"));
+    try testing.expectEqual(@as(u16, 0xffff), try parseHexU16("FFFF"));
 }

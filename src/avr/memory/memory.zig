@@ -1,4 +1,4 @@
-const constants = @import("constants.zig");
+const constants = @import("../constants/constants.zig");
 
 pub const FlashSize = constants.Flash.size;
 

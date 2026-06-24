@@ -13,6 +13,13 @@ pub fn add(a: i32, b: i32) i32 {
     return a + b;
 }
 
+const testing = std.testing;
+
 test "basic add functionality" {
-    try std.testing.expect(add(3, 7) == 10);
+    try testing.expect(add(3, 7) == 10);
+}
+
+test "add negative numbers" {
+    try testing.expectEqual(0, add(5, -5));
+    try testing.expectEqual(-3, add(-1, -2));
 }

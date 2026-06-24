@@ -1,7 +1,7 @@
 const std = @import("std");
-const memory = @import("memory.zig");
-const constants = @import("constants.zig");
-const timer = @import("timer.zig");
+const memory = @import("../memory/memory.zig");
+const constants = @import("../constants/constants.zig");
+const timer = @import("../timer/timer.zig");
 
 pub const Cpu = struct {
     const PointerMode = enum {
@@ -16,7 +16,6 @@ pub const Cpu = struct {
     io: [constants.Io.size]u8 = [_]u8{0} ** constants.Io.size,
     sram: [constants.Sram.size]u8 = [_]u8{0} ** constants.Sram.size,
     timer0: timer.Timer0 = .{},
-    // AVR program counter as a WORD address.
     pc: u32 = 0,
 
     sp: u16 = constants.Sram.end,
@@ -808,7 +807,7 @@ pub const Cpu = struct {
         self.cycles += constants.Cycles.lpm;
     }
 
-    fn writeIo(self: *Cpu, address: usize, value: u8) !void {
+    pub fn writeIo(self: *Cpu, address: usize, value: u8) !void {
         if (address >= self.io.len) {
             return error.IoAddressOutOfRange;
         }
@@ -841,7 +840,7 @@ pub const Cpu = struct {
         }
     }
 
-    fn readIo(self: *Cpu, address: usize) !u8 {
+    pub fn readIo(self: *Cpu, address: usize) !u8 {
         if (address >= self.io.len) {
             return error.IoAddressOutOfRange;
         }
@@ -857,7 +856,7 @@ pub const Cpu = struct {
         return self.io[address];
     }
 
-    fn readData(self: *Cpu, address: u16) !u8 {
+    pub fn readData(self: *Cpu, address: u16) !u8 {
         if (address < self.r.len) {
             return self.r[address];
         }
@@ -878,7 +877,7 @@ pub const Cpu = struct {
         return self.sram[address];
     }
 
-    fn writeData(self: *Cpu, address: u16, value: u8) !void {
+    pub fn writeData(self: *Cpu, address: u16, value: u8) !void {
         if (address < self.r.len) {
             self.r[address] = value;
             return;
@@ -1014,27 +1013,27 @@ pub const Cpu = struct {
         self.cycles += if (skipped_words == 2) constants.Cycles.skip_two_word else constants.Cycles.skip_one_word;
     }
 
-    fn isTwoWordInstruction(opcode: u16) bool {
+    pub fn isTwoWordInstruction(opcode: u16) bool {
         return ((opcode & constants.Opcode.call_mask) == constants.Opcode.call_pattern) or
             ((opcode & constants.Opcode.jmp_mask) == constants.Opcode.jmp_pattern) or
             ((opcode & constants.Opcode.lds_mask) == constants.Opcode.lds_pattern) or
             ((opcode & constants.Opcode.sts_mask) == constants.Opcode.sts_pattern);
     }
 
-    fn readRegisterWord(self: *const Cpu, register_index: usize) u16 {
+    pub fn readRegisterWord(self: *const Cpu, register_index: usize) u16 {
         return @as(u16, self.r[register_index]) | (@as(u16, self.r[register_index + 1]) << 8);
     }
 
-    fn writeRegisterWord(self: *Cpu, register_index: usize, value: u16) void {
+    pub fn writeRegisterWord(self: *Cpu, register_index: usize, value: u16) void {
         self.r[register_index] = @as(u8, @intCast(value & 0x00ff));
         self.r[register_index + 1] = @as(u8, @intCast(value >> 8));
     }
 
-    fn getFlag(self: *const Cpu, flag: u3) bool {
+    pub fn getFlag(self: *const Cpu, flag: u3) bool {
         return (self.sreg & bitMask(flag)) != 0;
     }
 
-    fn setFlag(self: *Cpu, flag: u3, value: bool) void {
+    pub fn setFlag(self: *Cpu, flag: u3, value: bool) void {
         if (value) {
             self.sreg |= bitMask(flag);
         } else {
@@ -1184,7 +1183,7 @@ pub const Cpu = struct {
     }
 
     fn fireInterrupt(self: *Cpu, vector_word: u16) !void {
-        const return_pc = self.pc; // must already be next instruction
+        const return_pc = self.pc;
 
         self.sreg &= ~(@as(u8, 1) << constants.Sreg.i);
 
