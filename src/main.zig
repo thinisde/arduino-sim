@@ -107,41 +107,41 @@ test "parseOptions default path" {
 }
 
 test "parseOptions path only" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex" };
     const opts = try parseOptions(&args);
     try testing.expectEqualStrings("blink.hex", opts.path);
     try testing.expectEqual(@as(usize, 1000), opts.steps);
 }
 
 test "parseOptions trace flag" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "--trace"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--trace" };
     const opts = try parseOptions(&args);
     try testing.expectEqual(true, opts.trace);
     try testing.expectEqual(false, opts.quiet);
 }
 
 test "parseOptions quiet flag" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "--quiet"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--quiet" };
     const opts = try parseOptions(&args);
     try testing.expectEqual(false, opts.trace);
     try testing.expectEqual(true, opts.quiet);
 }
 
 test "parseOptions trace and quiet" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "--trace", "--quiet"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--trace", "--quiet" };
     const opts = try parseOptions(&args);
     try testing.expectEqual(true, opts.trace);
     try testing.expectEqual(true, opts.quiet);
 }
 
 test "parseOptions steps flag" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "--steps", "500"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--steps", "500" };
     const opts = try parseOptions(&args);
     try testing.expectEqual(@as(usize, 500), opts.steps);
 }
 
 test "parseOptions all flags" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "--steps", "2000", "--trace", "--quiet"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--steps", "2000", "--trace", "--quiet" };
     const opts = try parseOptions(&args);
     try testing.expectEqualStrings("blink.hex", opts.path);
     try testing.expectEqual(@as(usize, 2000), opts.steps);
@@ -150,17 +150,17 @@ test "parseOptions all flags" {
 }
 
 test "parseOptions missing steps value" {
-    const args = [_][]const u8{"arduino_sim", "--steps"};
+    const args = [_][]const u8{ "arduino_sim", "--steps" };
     try testing.expectError(error.MissingStepsValue, parseOptions(&args));
 }
 
 test "parseOptions unknown flag" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "--unknown"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "--unknown" };
     try testing.expectError(error.UnknownOption, parseOptions(&args));
 }
 
 test "parseOptions unexpected second path argument" {
-    const args = [_][]const u8{"arduino_sim", "blink.hex", "other.hex"};
+    const args = [_][]const u8{ "arduino_sim", "blink.hex", "other.hex" };
     try testing.expectError(error.UnexpectedArgument, parseOptions(&args));
 }
 
