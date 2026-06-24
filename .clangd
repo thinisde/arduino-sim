@@ -1,0 +1,6 @@
+CompileFlags:
+  Add:
+    - --target=avr
+    - -D__AVR_ATmega328P__
+    - -DF_CPU=16000000UL
+    - -I/opt/homebrew/Cellar/avr-gcc@9/9.5.0/avr/include

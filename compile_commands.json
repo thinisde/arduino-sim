@@ -1,0 +1,7 @@
+[
+  {
+    "directory": "/Volumes/Developer/arduino-sim",
+    "command": "/opt/homebrew/bin/avr-gcc -mmcu=atmega328p -Os -DF_CPU=16000000UL -c examples/bare/d13_toggle.c -o build/d13_toggle.o",
+    "file": "/Volumes/Developer/arduino-sim/examples/bare/d13_toggle.c"
+  }
+]
