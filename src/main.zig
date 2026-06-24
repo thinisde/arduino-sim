@@ -1,14 +1,21 @@
 const std = @import("std");
 
+const board_registry = @import("board/registry.zig");
+const board_spec = @import("board/spec.zig");
+
 const memory = @import("avr/memory/memory.zig");
 const hex = @import("loader/hex.zig");
 const cpu_mod = @import("avr/cpu/cpu.zig");
+const gpio_mod = @import("avr/gpio/gpio.zig");
+
+const default_board: board_spec.BoardKind = .arduino_uno;
 
 const Options = struct {
     path: []const u8,
     steps: usize = 1000,
     trace: bool = false,
     quiet: bool = false,
+    selected_board_kind: board_spec.BoardKind = default_board,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -27,16 +34,22 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
 
+    const board = board_registry.get(options.selected_board_kind);
+
     const contents = try std.Io.Dir.cwd().readFileAlloc(io, options.path, allocator, .limited(1024 * 1024));
     defer allocator.free(contents);
 
-    var flash = memory.Flash{};
+    var flash = try memory.Flash.init(allocator, board.mcu);
+    defer flash.deinit(allocator);
 
-    _ = try hex.loadIntoFlash(contents, &flash);
+    try hex.loadIntoFlash(contents, &flash);
 
-    var cpu = cpu_mod.Cpu.init(&flash);
+    var cpu = cpu_mod.Cpu.init(allocator, board, &flash);
     cpu.trace = options.trace;
     cpu.quiet = options.quiet;
+
+    var gpio = gpio_mod.Gpio.init(board, cpu.io);
+    cpu.gpio = &gpio;
 
     var step_count: usize = 0;
 
@@ -74,6 +87,16 @@ fn parseOptions(args: []const []const u8) !Options {
             options.steps = try std.fmt.parseInt(usize, args[i], 10);
         } else if (std.mem.startsWith(u8, arg, "--")) {
             return error.UnknownOption;
+        } else if (std.mem.eql(u8, arg, "--board")) {
+            const board_name = args.next() orelse {
+                std.debug.print("error: --board requires a value\n", .{});
+                return;
+            };
+
+            options.selected_board_kind = board_registry.parse(board_name) orelse {
+                std.debug.print("error: unkown board '{s}'", .{board_name});
+                return;
+            };
         } else if (options.path.len == 0) {
             options.path = arg;
         } else {

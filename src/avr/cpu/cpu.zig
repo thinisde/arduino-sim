@@ -3,26 +3,56 @@ const memory = @import("../memory/memory.zig");
 const constants = @import("../constants/constants.zig");
 const timer = @import("../timer/timer.zig");
 const decode = @import("decode.zig");
+const board_spec = @import("../../board/spec.zig");
+const mcu_spec = @import("../../mcu/spec.zig");
+const gpio_mod = @import("../gpio/gpio.zig");
 
 pub const Cpu = struct {
     flash: *const memory.Flash,
 
+    mcu: *const mcu_spec.McuSpec,
+    board: *const board_spec.BoardSpec,
+
     r: [32]u8 = [_]u8{0} ** 32,
-    io: [constants.Io.size]u8 = [_]u8{0} ** constants.Io.size,
-    sram: [constants.Sram.size]u8 = [_]u8{0} ** constants.Sram.size,
+    io: []u8,
+    sram: []u8,
     timer0: timer.Timer0 = .{},
+    gpio: ?*gpio_mod.Gpio = null,
     pc: u32 = 0,
 
-    sp: u16 = constants.Sram.end,
+    sp: u16,
     sreg: u8 = 0,
     cycles: u64 = 0,
     trace: bool = false,
     quiet: bool = false,
 
-    pub fn init(flash: *const memory.Flash) Cpu {
+    pub fn init(allocator: std.mem.Allocator, board: *const board_spec.BoardSpec, flash: *const memory.Flash) Cpu {
+        const io = try allocator.alloc(u8, board.mcu.io.size);
+        errdefer allocator.free(io);
+        @memset(io, 0);
+
+        const sram = try allocator.alloc(u8, board.mcu.data.size);
+        errdefer allocator.free(sram);
+        @memset(sram, 0);
+
         return Cpu{
+            .mcu = board.mcu,
+            .board = board,
+
+            .io = io,
+            .sram = sram,
+            .sp = board.mcu.sram.end,
+
             .flash = flash,
         };
+    }
+
+    pub fn deinit(self: *Cpu, allocator: std.mem.Allocator) void {
+        allocator.free(self.io);
+        allocator.free(self.sram);
+
+        self.io = &[_]u8{};
+        self.sram = &[_]u8{};
     }
 
     pub fn step(self: *Cpu) !void {
@@ -76,7 +106,7 @@ pub const Cpu = struct {
             return error.IoAddressOutOfRange;
         }
 
-        if (address == constants.Io.sreg) {
+        if (address == self.mcu.io.sreg) {
             self.sreg = value;
             self.io[address] = value;
             return;
@@ -89,7 +119,9 @@ pub const Cpu = struct {
         const old = self.io[address];
         self.io[address] = value;
 
-        self.handlePinSideEffects(address, old, value);
+        if (self.gpio) |gpio| {
+            gpio.handleIoWrite(address, old, value);
+        }
     }
 
     pub fn readIo(self: *Cpu, address: usize) !u8 {
@@ -97,7 +129,7 @@ pub const Cpu = struct {
             return error.IoAddressOutOfRange;
         }
 
-        if (address == constants.Io.sreg) {
+        if (address == self.mcu.io.sreg) {
             return self.sreg;
         }
 
@@ -167,7 +199,7 @@ pub const Cpu = struct {
     }
 
     pub fn popByte(self: *Cpu) !u8 {
-        if (self.sp == constants.Sram.end) {
+        if (self.sp == self.mcu.sram.end) {
             return error.StackPointerOutOfRange;
         }
 
@@ -311,7 +343,7 @@ pub const Cpu = struct {
 
         if (self.timer0.overflowInterruptPending()) {
             self.timer0.acceptOverflowInterrupt();
-            try self.fireInterrupt(constants.InterruptVector.timer0_ovf_word);
+            try self.fireInterrupt(self.mcu.vectors.timer1_ovf_word_addr);
         }
     }
 
@@ -325,45 +357,5 @@ pub const Cpu = struct {
         self.pc = vector_word;
         self.cycles += constants.Cycles.interrupt_entry;
         self.timer0.tick(constants.Cycles.interrupt_entry);
-    }
-
-    fn handlePinSideEffects(
-        self: *Cpu,
-        address: usize,
-        old: u8,
-        new: u8,
-    ) void {
-        if (old == new) return;
-
-        switch (address) {
-            constants.Io.ddrb => {
-                const old_output = (old & constants.Io.pb5_mask) != 0;
-                const new_output = (new & constants.Io.pb5_mask) != 0;
-
-                if (old_output != new_output) {
-                    self.pinPrint("[pin] D13 mode = {s}\n", .{
-                        if (new_output) "OUTPUT" else "INPUT",
-                    });
-                }
-            },
-
-            constants.Io.portb => {
-                const ddrb = self.io[constants.Io.ddrb];
-                const d13_is_output = (ddrb & constants.Io.pb5_mask) != 0;
-
-                if (!d13_is_output) return;
-
-                const old_high = (old & constants.Io.pb5_mask) != 0;
-                const new_high = (new & constants.Io.pb5_mask) != 0;
-
-                if (old_high != new_high) {
-                    self.pinPrint("[pin] D13 = {s}\n", .{
-                        if (new_high) "HIGH" else "LOW",
-                    });
-                }
-            },
-
-            else => {},
-        }
     }
 };

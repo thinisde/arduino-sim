@@ -180,9 +180,9 @@ pub const Opcode = struct {
     pub const ld_x_postincrement_pattern: u16 = 0x900d;
     pub const ld_x_predecrement_mask: u16 = 0xfe0f;
     pub const ld_x_predecrement_pattern: u16 = 0x900e;
-    pub const ld_z_mask: u16 = 0xfe0f;
+    pub const ld_z_mask: u16 = 0xd208;
     pub const ld_z_pattern: u16 = 0x8000;
-    pub const ld_y_mask: u16 = 0xfe0f;
+    pub const ld_y_mask: u16 = 0xd208;
     pub const ld_y_pattern: u16 = 0x8008;
 
     pub const st_x_mask: u16 = 0xfe0f;
@@ -191,10 +191,99 @@ pub const Opcode = struct {
     pub const st_x_postincrement_pattern: u16 = 0x920d;
     pub const st_x_predecrement_mask: u16 = 0xfe0f;
     pub const st_x_predecrement_pattern: u16 = 0x920e;
-    pub const st_z_mask: u16 = 0xfe0f;
+    pub const st_z_mask: u16 = 0xd208;
     pub const st_z_pattern: u16 = 0x8200;
-    pub const st_y_mask: u16 = 0xfe0f;
+    pub const st_y_mask: u16 = 0xd208;
     pub const st_y_pattern: u16 = 0x8208;
+
+    pub const ld_z_postincrement_mask: u16 = 0xfe0f;
+    pub const ld_z_postincrement_pattern: u16 = 0x9001;
+    pub const ld_z_predecrement_mask: u16 = 0xfe0f;
+    pub const ld_z_predecrement_pattern: u16 = 0x9002;
+    pub const ld_y_postincrement_mask: u16 = 0xfe0f;
+    pub const ld_y_postincrement_pattern: u16 = 0x9009;
+    pub const ld_y_predecrement_mask: u16 = 0xfe0f;
+    pub const ld_y_predecrement_pattern: u16 = 0x900a;
+
+    pub const st_z_postincrement_mask: u16 = 0xfe0f;
+    pub const st_z_postincrement_pattern: u16 = 0x9201;
+    pub const st_z_predecrement_mask: u16 = 0xfe0f;
+    pub const st_z_predecrement_pattern: u16 = 0x9202;
+    pub const st_y_postincrement_mask: u16 = 0xfe0f;
+    pub const st_y_postincrement_pattern: u16 = 0x9209;
+    pub const st_y_predecrement_mask: u16 = 0xfe0f;
+    pub const st_y_predecrement_pattern: u16 = 0x920a;
+
+    pub const bset_mask: u16 = 0xff8f;
+    pub const bset_pattern: u16 = 0x9408;
+    pub const bclr_mask: u16 = 0xff8f;
+    pub const bclr_pattern: u16 = 0x9488;
+
+    pub const sbrc_mask: u16 = 0xfe08;
+    pub const sbrc_pattern: u16 = 0xfc00;
+    pub const sbrs_mask: u16 = 0xfe08;
+    pub const sbrs_pattern: u16 = 0xfe00;
+
+    pub const sbic_mask: u16 = 0xff00;
+    pub const sbic_pattern: u16 = 0x9900;
+
+    pub const bst_mask: u16 = 0xfe08;
+    pub const bst_pattern: u16 = 0xfa00;
+    pub const bld_mask: u16 = 0xfe08;
+    pub const bld_pattern: u16 = 0xf800;
+
+    pub const mul_mask: u16 = 0xfc00;
+    pub const mul_pattern: u16 = 0x9c00;
+    pub const muls_mask: u16 = 0xff00;
+    pub const muls_pattern: u16 = 0x0200;
+    pub const mul_su_fm_variants_mask: u16 = 0xff88;
+    pub const mulsu_pattern: u16 = 0x0300;
+    pub const fmul_pattern: u16 = 0x0308;
+    pub const fmuls_pattern: u16 = 0x0380;
+    pub const fmulsu_pattern: u16 = 0x0388;
+
+    pub const lsr_mask: u16 = 0xfe0f;
+    pub const lsr_pattern: u16 = 0x9406;
+    pub const ror_mask: u16 = 0xfe0f;
+    pub const ror_pattern: u16 = 0x9407;
+    pub const asr_mask: u16 = 0xfe0f;
+    pub const asr_pattern: u16 = 0x9405;
+    pub const swap_mask: u16 = 0xfe0f;
+    pub const swap_pattern: u16 = 0x9402;
+    pub const neg_mask: u16 = 0xfe0f;
+    pub const neg_pattern: u16 = 0x9401;
+
+    pub const sleep: u16 = 0x9588;
+    pub const wdr: u16 = 0x95a8;
+    pub const break_opcode: u16 = 0x9598;
+
+    pub const des_mask: u16 = 0xff0f;
+    pub const des_pattern: u16 = 0x940b;
+
+    pub const xch_mask: u16 = 0xfe0f;
+    pub const xch_pattern: u16 = 0x9204;
+    pub const las_mask: u16 = 0xfe0f;
+    pub const las_pattern: u16 = 0x9205;
+    pub const lac_mask: u16 = 0xfe0f;
+    pub const lac_pattern: u16 = 0x9206;
+    pub const lat_mask: u16 = 0xfe0f;
+    pub const lat_pattern: u16 = 0x9207;
+
+    pub const icall: u16 = 0x9509;
+    pub const ijmp: u16 = 0x9409;
+    pub const eicall: u16 = 0x9519;
+    pub const eijmp: u16 = 0x9419;
+
+    pub const elpm_implicit: u16 = 0x95d8;
+    pub const elpm_z_mask: u16 = 0xfe0f;
+    pub const elpm_z_pattern: u16 = 0x9006;
+    pub const elpm_z_postincrement_mask: u16 = 0xfe0f;
+    pub const elpm_z_postincrement_pattern: u16 = 0x9007;
+
+    pub const spm: u16 = 0x95e8;
+    pub const spm_z_plus: u16 = 0x95f8;
+
+    pub const branch_mask: u16 = 0xfc07;
 };
 
 pub const Jmp = struct {

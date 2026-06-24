@@ -1,10 +1,26 @@
+const std = @import("std");
 const constants = @import("../constants/constants.zig");
-
-pub const FlashSize = constants.Flash.size;
+const mcu_spec = @import("../../mcu/spec.zig");
 
 pub const Flash = struct {
-    bytes: [FlashSize]u8 =
-        [_]u8{constants.Flash.erased_byte} ** FlashSize,
+    bytes: []u8,
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        mcu: *const mcu_spec.McuSpec,
+    ) !Flash {
+        const bytes = try allocator.alloc(u8, mcu.flash.size);
+        @memset(bytes, mcu.flash.erased_byte);
+
+        return .{
+            .bytes = bytes,
+        };
+    }
+
+    pub fn deinit(self: *Flash, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+        self.bytes = &[_]u8{};
+    }
 
     pub fn writeByte(self: *Flash, address: usize, value: u8) !void {
         if (address >= self.bytes.len) {
@@ -23,7 +39,8 @@ pub const Flash = struct {
     }
 
     pub fn readWord(self: *const Flash, word_address: usize) !u16 {
-        const byte_address = word_address * constants.Instruction.word_size_bytes;
+        const byte_address =
+            word_address * constants.Instruction.word_size_bytes;
 
         const lo = try self.readByte(byte_address);
         const hi = try self.readByte(byte_address + 1);
