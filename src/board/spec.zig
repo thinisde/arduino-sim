@@ -24,6 +24,9 @@ pub const BoardSpec = struct {
     mcu_kind: mcu.McuKind,
     mcu: *const mcu.McuSpec,
 
+    default_serial_usart: usize,
+    exposed_usarts: []const usize,
+
     clock_hz: u32,
 
     digital_pins: []const Pin,

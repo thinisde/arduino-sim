@@ -7,7 +7,9 @@ const memory = @import("avr/memory/memory.zig");
 const hex = @import("loader/hex.zig");
 const cpu_mod = @import("avr/cpu/cpu.zig");
 const gpio_mod = @import("avr/gpio/gpio.zig");
+
 const real_time_throttle = @import("utils/real_time_throttle.zig");
+const terminal_input = @import("utils/terminal_input.zig");
 
 const default_board: board_spec.BoardKind = .arduino_uno;
 
@@ -33,6 +35,7 @@ const Options = struct {
     steps: usize = 1000,
     trace: bool = false,
     quiet: bool = false,
+    serial_raw: bool = false,
     selected_board_kind: board_spec.BoardKind = default_board,
     run_forever: bool = false,
     real_time: bool = true,
@@ -79,6 +82,13 @@ pub fn main(init: std.process.Init) !void {
 
     var throttle = real_time_throttle.RealTimeThrottle.init(io, clock_hz);
 
+    var terminal_mode = terminal_input.TerminalMode{};
+    defer terminal_mode.restore();
+
+    if (options.serial_raw) {
+        try terminal_mode.enableRaw();
+    }
+
     var step_count: usize = 0;
 
     if (options.run_forever) {
@@ -91,6 +101,9 @@ pub fn main(init: std.process.Init) !void {
         }
     } else {
         while (step_count < options.steps and !stop_requested.load(.acquire)) : (step_count += 1) {
+            if ((step_count & 0x0fff) == 0) { // every 4096 instructions
+                try terminal_input.pumpTerminalInput(&cpu);
+            }
             try cpu.step();
 
             if (options.real_time) {
@@ -125,8 +138,10 @@ fn parseOptions(args: []const []const u8) !Options {
             options.trace = true;
         } else if (std.mem.eql(u8, arg, "--run-forever")) {
             options.run_forever = true;
-        } else if (std.mem.eql(u8, arg, "--disable-real-time")) {
+        } else if (std.mem.eql(u8, arg, "--disable-realtime")) {
             options.real_time = false;
+        } else if (std.mem.eql(u8, arg, "--serialraw")) {
+            options.serial_raw = true;
         } else if (std.mem.eql(u8, arg, "--quiet")) {
             options.quiet = true;
         } else if (std.mem.eql(u8, arg, "--steps")) {

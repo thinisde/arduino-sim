@@ -8,9 +8,9 @@ const mcu_spec = @import("../../mcu/spec.zig");
 const gpio_mod = @import("../gpio/gpio.zig");
 const usart_mod = @import("../usart/usart.zig");
 
-pub const Cpu = struct {
-    seen_main: bool = false,
+const MaxUsarts = mcu_spec.MaxUsarts;
 
+pub const Cpu = struct {
     flash: *const memory.Flash,
 
     mcu: *const mcu_spec.McuSpec,
@@ -20,7 +20,7 @@ pub const Cpu = struct {
     data: memory.DataMemory,
 
     timer0: timer.Timer0,
-    usart0: ?usart_mod.Usart = null,
+    usarts: [MaxUsarts]?usart_mod.Usart = [_]?usart_mod.Usart{null} ** MaxUsarts,
     gpio: ?*gpio_mod.Gpio = null,
 
     pc: u32 = 0,
@@ -34,21 +34,22 @@ pub const Cpu = struct {
         var data = try memory.DataMemory.init(allocator, board.mcu);
         errdefer data.deinit(allocator);
 
+        if (board.mcu.usarts.len > MaxUsarts) {
+            return error.TooManyUsarts;
+        }
+
         var cpu = Cpu{
             .mcu = board.mcu,
             .board = board,
             .timer0 = timer.Timer0.init(board.mcu),
-            .usart0 = if (board.mcu.usart0) |usart0_spec|
-                usart_mod.Usart.init(usart0_spec)
-            else
-                null,
-
             .data = data,
-
             .sp = board.mcu.sram.end,
-
             .flash = flash,
         };
+
+        for (board.mcu.usarts, 0..) |usart_spec, i| {
+            cpu.usarts[i] = usart_mod.Usart.init(usart_spec);
+        }
 
         try cpu.syncStackPointerRegisters();
 
@@ -59,10 +60,34 @@ pub const Cpu = struct {
         self.data.deinit(allocator);
     }
 
-    fn peripheralBus(self: *Cpu) memory.PeripheralBus {
+    fn peripheralBus(_: *Cpu) memory.PeripheralBus {
         return .{
-            .usart0 = if (self.usart0) |*usart0| usart0 else null,
+            .usart0 = null,
         };
+    }
+
+    fn findUsartByAddress(self: *Cpu, address: u16) ?*usart_mod.Usart {
+        for (&self.usarts) |*maybe_usart| {
+            if (maybe_usart.*) |*usart| {
+                if (usart.handles(address)) {
+                    return usart;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    pub fn injectUsartRxByte(self: *Cpu, index: usize, value: u8) void {
+        if (index >= self.usarts.len) return;
+
+        if (self.usarts[index]) |*usart| {
+            usart.injectRxByte(value);
+        }
+    }
+
+    pub fn injectDefaultSerialRxByte(self: *Cpu, value: u8) void {
+        self.injectUsartRxByte(self.board.default_serial_usart, value);
     }
 
     pub fn step(self: *Cpu) !void {
@@ -178,13 +203,12 @@ pub const Cpu = struct {
             return value;
         }
 
-        var bus = self.peripheralBus();
-        if (self.usart0) |*usart0| {
-            if (usart0.handles(address)) {
-                const raw = try self.data.readRawByte(address);
-                return usart0.read(address, raw);
-            }
+        if (self.findUsartByAddress(address)) |usart| {
+            const raw = try self.data.readRawByte(address);
+            return usart.read(address, raw);
         }
+
+        var bus = self.peripheralBus();
         return self.data.readByte(address, &bus);
     }
 
@@ -212,19 +236,13 @@ pub const Cpu = struct {
             return;
         }
 
-        var bus = self.peripheralBus();
-        if (self.usart0) |*usart0| {
-            if (usart0.handles(address)) {
-                try self.data.writeRawByte(address, value);
-
-                if (usart0.write(address, value, self.cycles, self.board.clock_hz)) {
-                    return;
-                }
-
-                return;
-            }
+        if (self.findUsartByAddress(address)) |usart| {
+            try self.data.writeRawByte(address, value);
+            _ = usart.write(address, value, self.cycles, self.board.clock_hz);
+            return;
         }
 
+        var bus = self.peripheralBus();
         try self.data.writeByte(
             address,
             value,
@@ -424,13 +442,20 @@ pub const Cpu = struct {
             return;
         }
 
-        if (self.usart0) |*usart0| {
-            const ucsrb = self.data.readRawByte(usart0.spec.ucsrb) catch 0;
-            const udre_enabled = usart0.dataRegisterEmptyInterruptEnabled(ucsrb);
+        for (&self.usarts) |*maybe_usart| {
+            if (maybe_usart.*) |*usart| {
+                const ucsrb = self.data.readRawByte(usart.spec.ucsrb) catch 0;
 
-            if (udre_enabled and usart0.dataRegisterEmpty()) {
-                try self.fireInterrupt(self.mcu.vectors.usart_udre_word_addr);
-                return;
+                // RX first: USART_RX vector has higher priority than UDRE.
+                if (usart.receiveCompleteInterruptPending(ucsrb)) {
+                    try self.fireInterrupt(usart.spec.rx_vector_word_addr);
+                    return;
+                }
+
+                if (usart.dataRegisterEmptyInterruptEnabled(ucsrb) and usart.dataRegisterEmpty()) {
+                    try self.fireInterrupt(usart.spec.udre_vector_word_addr);
+                    return;
+                }
             }
         }
     }

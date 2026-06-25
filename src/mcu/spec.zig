@@ -1,3 +1,5 @@
+pub const MaxUsarts = 4;
+
 pub const McuKind = enum {
     atmega328p,
 };
@@ -78,13 +80,11 @@ pub const VectorSpec = struct {
     timer0_ovf_index: u16,
     timer0_ovf_word_addr: u16,
     timer0_ovf_byte_addr: u16,
-
-    usart_udre_index: u8,
-    usart_udre_word_addr: u16,
-    usart_udre_byte_addr: u16,
 };
 
 pub const UsartSpec = struct {
+    index: usize,
+
     udr: u16,
     ucsra: u16,
     ucsrb: u16,
@@ -92,14 +92,19 @@ pub const UsartSpec = struct {
     ubrrl: u16,
     ubrrh: u16,
 
-    rxen_bit: u3,
-    txen_bit: u3,
-    udrie_bit: u3,
-
     rxc_bit: u3,
     txc_bit: u3,
     udre_bit: u3,
-    u2x_bit: u3,
+
+    rxcie_bit: u3,
+    txcie_bit: u3,
+    udrie_bit: u3,
+    rxen_bit: u3,
+    txen_bit: u3,
+
+    rx_vector_word_addr: u16,
+    udre_vector_word_addr: u16,
+    tx_vector_word_addr: u16,
 };
 
 pub const McuSpec = struct {
@@ -112,7 +117,7 @@ pub const McuSpec = struct {
     timer0: Timer0Spec,
     vectors: VectorSpec,
     gpio_ports: []const GpioPortSpec,
-    usart0: ?UsartSpec,
+    usarts: []const UsartSpec,
 };
 
 pub const PortId = enum {

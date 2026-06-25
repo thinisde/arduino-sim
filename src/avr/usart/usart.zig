@@ -6,19 +6,48 @@ fn bit(bit_index: u3) u8 {
 }
 
 pub const Usart = struct {
+    const RxBufferSize = 128;
+
     spec: mcu_spec.UsartSpec,
+
+    rx_buf: [RxBufferSize]u8 = [_]u8{0} ** RxBufferSize,
+    rx_head: usize = 0,
+    rx_tail: usize = 0,
+    rx_len: usize = 0,
 
     pub fn init(spec: mcu_spec.UsartSpec) Usart {
         return .{ .spec = spec };
     }
 
     pub fn handles(self: *const Usart, addr: u16) bool {
-        return addr == self.spec.udr or addr == self.spec.ucsra or addr == self.spec.ucsrc or addr == self.spec.ubrrl or addr == self.spec.ubrrh or addr == self.spec.ucsrb;
+        return addr == self.spec.udr or
+            addr == self.spec.ucsra or
+            addr == self.spec.ucsrb or
+            addr == self.spec.ucsrc or
+            addr == self.spec.ubrrl or
+            addr == self.spec.ubrrh;
     }
 
     pub fn read(self: *Usart, addr: u16, backing_value: u8) u8 {
         if (addr == self.spec.ucsra) {
-            return backing_value | bit(self.spec.udre_bit) | bit(self.spec.txc_bit);
+            var value = backing_value;
+
+            // Simplified TX model: transmitter is always ready.
+            value |= bit(self.spec.udre_bit);
+            value |= bit(self.spec.txc_bit);
+
+            // RXC is dynamic: set while a received byte is waiting.
+            if (self.rx_len > 0) {
+                value |= bit(self.spec.rxc_bit);
+            } else {
+                value &= ~bit(self.spec.rxc_bit);
+            }
+
+            return value;
+        }
+
+        if (addr == self.spec.udr) {
+            return self.readData();
         }
 
         return backing_value;
@@ -30,26 +59,32 @@ pub const Usart = struct {
             return true;
         }
 
+        // For UCSRnA/UCSRnB/UCSRnC/UBRRnL/UBRRnH, let DataMemory keep the value.
         return false;
     }
 
-    fn writeData(_: *Usart, value: u8, _: u64, _: u64) void {
-        if (value == '\r') return;
-        if (value == '\n') {
-            std.debug.print("\n", .{});
+    pub fn injectRxByte(self: *Usart, value: u8) void {
+        if (self.rx_len == RxBufferSize) {
+            // First model: drop on overflow.
+            // Later: model DORn in UCSRnA.
             return;
         }
 
-        // const simulated_seconds = @as(f64, @floatFromInt(cycles)) / @as(f64, @floatFromInt(clock_hz));
-        //
-        // std.debug.print("[{d:.6}]s [serial0] {c}\n", .{
-        //     simulated_seconds,
-        //     value,
-        // });
-        //
-        std.debug.print("{c}", .{
-            value,
-        });
+        self.rx_buf[self.rx_tail] = value;
+        self.rx_tail = (self.rx_tail + 1) % RxBufferSize;
+        self.rx_len += 1;
+    }
+
+    pub fn receiveComplete(self: *const Usart) bool {
+        return self.rx_len > 0;
+    }
+
+    pub fn receiveCompleteInterruptEnabled(self: *const Usart, ucsrb_value: u8) bool {
+        return (ucsrb_value & bit(self.spec.rxcie_bit)) != 0;
+    }
+
+    pub fn receiveCompleteInterruptPending(self: *const Usart, ucsrb_value: u8) bool {
+        return self.receiveComplete() and self.receiveCompleteInterruptEnabled(ucsrb_value);
     }
 
     pub fn dataRegisterEmptyInterruptEnabled(self: *const Usart, ucsrb_value: u8) bool {
@@ -58,6 +93,33 @@ pub const Usart = struct {
 
     pub fn dataRegisterEmpty(self: *const Usart) bool {
         _ = self;
-        return true; // TX-only model: always ready
+        return true;
+    }
+
+    fn readData(self: *Usart) u8 {
+        if (self.rx_len == 0) {
+            return 0;
+        }
+
+        const value = self.rx_buf[self.rx_head];
+        self.rx_head = (self.rx_head + 1) % RxBufferSize;
+        self.rx_len -= 1;
+
+        return value;
+    }
+
+    fn writeData(self: *Usart, value: u8, cycles: u64, clock_hz: u64) void {
+        _ = self;
+        _ = cycles;
+        _ = clock_hz;
+
+        if (value == '\r') return;
+
+        if (value == '\n') {
+            std.debug.print("\n", .{});
+            return;
+        }
+
+        std.debug.print("{c}", .{value});
     }
 };

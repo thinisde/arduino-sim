@@ -27,6 +27,9 @@ pub const spec = board.BoardSpec{
 
     .clock_hz = 16_000_000,
 
+    .default_serial_usart = 0,
+    .exposed_usarts = &.{0},
+
     .digital_pins = &digital_pins,
     .led_builtin = 13,
 };
