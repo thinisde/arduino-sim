@@ -1,4 +1,5 @@
 # Arduino Simulator
+[![wakatime](https://wakatime.com/badge/user/4afa9149-7101-4ea6-8fa0-255a4d5fe334/project/91e9b9c1-9024-44fb-b8fe-de3af6a20677.svg)](https://wakatime.com/badge/user/4afa9149-7101-4ea6-8fa0-255a4d5fe334/project/91e9b9c1-9024-44fb-b8fe-de3af6a20677)
 
 A Zig-based simulator for Arduino Uno and AVR programs.
 
