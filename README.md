@@ -1,5 +1,4 @@
 # Arduino Simulator
-[![wakatime](https://wakatime.com/badge/user/4afa9149-7101-4ea6-8fa0-255a4d5fe334/project/91e9b9c1-9024-44fb-b8fe-de3af6a20677.svg)](https://wakatime.com/badge/user/4afa9149-7101-4ea6-8fa0-255a4d5fe334/project/91e9b9c1-9024-44fb-b8fe-de3af6a20677)
 
 A Zig-based simulator for Arduino Uno and AVR programs.
 
@@ -19,34 +18,49 @@ The project aims to run Arduino sketches, AVR C/C++ programs, and compiled AVR H
 
 ## Project Status
 
-The simulator can currently run simple Arduino Uno sketches that use digital output and Timer0-based delays.
+The simulator can currently run Arduino Uno / ATmega328P sketches that use Arduino startup, digital output, Timer0-based delays, interrupts, and basic serial I/O.
 
 Supported or partially supported:
 
-- AVR CPU core
-- Flash memory loading
-- SRAM and I/O memory access
-- Timer0 overflow interrupts
-- Global interrupt handling
-- `RETI`
-- Basic GPIO side effects
-- Arduino digital pin mapping for Uno
+* AVR CPU core
+* Flash memory loading from Intel HEX
+* SRAM and data/I/O memory access
+* Stack pointer handling
+* Global interrupt handling
+* `RET` / `RETI`
+* Timer0 ticking
+* Timer0 overflow interrupt dispatch
+* Arduino `delay()`, `micros()`, and Timer0 ISR behavior
+* Basic GPIO side effects
+* Arduino Uno digital pin mapping, including D13 / PB5
+* USART/UART transmit output through simulated `UDR`
+* USART/UART receive input through simulated RX queue
+* USART RX complete interrupt dispatch
+* Arduino `Serial.print`, `Serial.write`, `Serial.available`, and `Serial.read` for simple echo-style sketches
+* Host terminal input polling into the simulated default serial USART
+* MCU/board spec structure for multiple USART interfaces
 
-Not yet implemented or incomplete:
+Known limitations or incomplete areas:
 
-- UART
-- ADC
-- PWM
-- Timer1
-- Timer2
-- SPI
-- I2C
-- EEPROM
-- External interrupts
-- Pin-change interrupts
-- Watchdog
-- Sleep modes
-- Analog comparator
+* USART model is still simplified
+
+  * no accurate baud-rate timing yet
+  * no real TX shift-register timing
+  * no detailed error flag behavior such as frame error, parity error, or overrun
+  * terminal raw/no-echo mode still needs cleanup
+* ADC
+* PWM
+* Timer1
+* Timer2
+* SPI
+* I2C / TWI
+* EEPROM
+* External interrupts
+* Pin-change interrupts
+* Watchdog
+* Sleep modes
+* Analog comparator
+* More complete AVR opcode coverage as required by compiled sketches
 
 ## Requirements
 
