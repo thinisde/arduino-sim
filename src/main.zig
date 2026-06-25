@@ -72,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
     cpu.trace = options.trace;
     cpu.quiet = options.quiet;
 
-    var gpio = gpio_mod.Gpio.init(board, cpu.io, &cpu.cycles);
+    var gpio = gpio_mod.Gpio.init(board, &cpu.data, &cpu.cycles);
     cpu.gpio = &gpio;
 
     const clock_hz: u64 = board.clock_hz;

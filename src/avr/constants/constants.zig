@@ -1,13 +1,3 @@
-pub const Flash = struct {
-    pub const size = 32 * 1024;
-    pub const erased_byte: u8 = 0xff;
-};
-
-pub const Sram = struct {
-    pub const size = 0x0900;
-    pub const end: u16 = 0x08ff;
-};
-
 pub const Instruction = struct {
     pub const word_size_bytes = 2;
 };
@@ -184,6 +174,14 @@ pub const Opcode = struct {
     pub const ld_z_pattern: u16 = 0x8000;
     pub const ld_y_mask: u16 = 0xd208;
     pub const ld_y_pattern: u16 = 0x8008;
+
+    pub const ldd_std_mask: u16 = 0xd208;
+
+    pub const ldd_z_pattern: u16 = 0x8000;
+    pub const ldd_y_pattern: u16 = 0x8008;
+
+    pub const std_z_pattern: u16 = 0x8200;
+    pub const std_y_pattern: u16 = 0x8208;
 
     pub const st_x_mask: u16 = 0xfe0f;
     pub const st_x_pattern: u16 = 0x920c;
@@ -384,79 +382,4 @@ pub const Sreg = struct {
     pub const h: u3 = 5;
     pub const t: u3 = 6;
     pub const i: u3 = 7;
-};
-
-pub const Io = struct {
-    pub const size = 64;
-
-    pub const pinb: usize = 0x03;
-    pub const ddrb: usize = 0x04;
-    pub const portb: usize = 0x05;
-
-    pub const tifr0: usize = 0x15;
-    pub const tccr0a: usize = 0x24;
-    pub const tccr0b: usize = 0x25;
-    pub const tcnt0: usize = 0x26;
-
-    pub const ocr0a: usize = 0x27;
-    pub const ocr0b: usize = 0x28;
-
-    pub const sreg: usize = 0x3f;
-
-    pub const pb5_mask: u8 = 1 << 5;
-};
-
-pub const Data = struct {
-    pub const size = 0x0900;
-
-    pub const io_offset: u16 = 0x20;
-
-    pub const sreg: u16 = 0x005f;
-
-    pub const pinb: u16 = 0x0023;
-    pub const ddrb: u16 = 0x0024;
-    pub const portb: u16 = 0x0025;
-
-    pub const tifr0: u16 = 0x0035;
-    pub const tccr0a: u16 = 0x0044;
-    pub const tccr0b: u16 = 0x0045;
-    pub const tcnt0: u16 = 0x0046;
-    pub const ocr0a: u16 = 0x0047;
-    pub const ocr0b: u16 = 0x0048;
-    pub const timsk0: u16 = 0x006e;
-};
-
-pub const Timer0 = struct {
-    pub const max: u8 = 0xff;
-
-    pub const Tifr0 = struct {
-        pub const tov0: u3 = 0;
-        pub const ocf0a: u3 = 1;
-        pub const ocf0b: u3 = 2;
-    };
-
-    pub const Timsk0 = struct {
-        pub const toie0: u3 = 0;
-        pub const ocie0a: u3 = 1;
-        pub const ocie0b: u3 = 2;
-    };
-
-    pub const Tccr0b = struct {
-        pub const cs00: u3 = 0;
-        pub const cs01: u3 = 1;
-        pub const cs02: u3 = 2;
-
-        pub const cs_mask: u8 = 0b0000_0111;
-
-        pub const stopped: u8 = 0;
-        pub const prescale_1: u8 = 1;
-        pub const prescale_8: u8 = 2;
-        pub const prescale_64: u8 = 3;
-        pub const prescale_256: u8 = 4;
-        pub const prescale_1024: u8 = 5;
-    };
-};
-
-pub const InterruptVector = struct {
-    pub const timer0_ovf_word: u16 = 0x0020;
 };

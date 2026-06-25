@@ -49,11 +49,11 @@ pub const Timer0 = struct {
         if (address == io.tccr0b) {
             self.tccr0b = value;
 
-            std.debug.print("Timer0 TCCR0B=0x{x:0>2} cs={} prescaler={?}\n", .{
-                value,
-                value & self.mcu.timer0.cs_mask,
-                self.prescaler(),
-            });
+            // std.debug.print("Timer0 TCCR0B=0x{x:0>2} cs={} prescaler={?}\n", .{
+            //     value,
+            //     value & self.mcu.timer0.cs_mask,
+            //     self.prescaler(),
+            // });
 
             return true;
         }
@@ -75,10 +75,10 @@ pub const Timer0 = struct {
         if (address == self.mcu.data.timsk0) {
             self.timsk0 = value;
 
-            std.debug.print("Timer0 TIMSK0=0x{x:0>2} toie0={}\n", .{
-                value,
-                (value & (@as(u8, 1) << self.mcu.timer0.toie0_bit)) != 0,
-            });
+            // std.debug.print("Timer0 TIMSK0=0x{x:0>2} toie0={}\n", .{
+            //     value,
+            //     (value & (@as(u8, 1) << self.mcu.timer0.toie0_bit)) != 0,
+            // });
 
             return true;
         }

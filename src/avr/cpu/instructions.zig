@@ -1,6 +1,7 @@
 const Cpu = @import("cpu.zig").Cpu;
 const constants = @import("../constants/constants.zig");
 const decode = @import("decode.zig");
+const std = @import("std");
 
 pub const PointerMode = enum {
     none,
@@ -40,6 +41,7 @@ pub fn execSei(cpu: *Cpu, _: u16) !void {
 pub fn execLpmImplicit(cpu: *Cpu, _: u16) !void {
     const address = cpu.readRegisterWord(30);
     const value = try cpu.flash.readByte(address);
+
     cpu.r[0] = value;
     cpu.tracePrint("LPM ; value=0x{x:0>2}\n", .{value});
     cpu.pc += 1;
@@ -60,46 +62,6 @@ pub fn execBrcc(cpu: *Cpu, opcode: u16) !void {
 
 pub fn execBrcs(cpu: *Cpu, opcode: u16) !void {
     try execBranch(cpu, opcode, cpu.getFlag(constants.Sreg.c), "BRCS");
-}
-
-pub fn execLdX(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 26, .none, "LD X");
-}
-
-pub fn execLdXPlus(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 26, .postincrement, "LD X+");
-}
-
-pub fn execLdMinusX(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 26, .predecrement, "LD -X");
-}
-
-pub fn execStX(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 26, .none, "ST X");
-}
-
-pub fn execStXPlus(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 26, .postincrement, "ST X+");
-}
-
-pub fn execStMinusX(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 26, .predecrement, "ST -X");
-}
-
-pub fn execLdZ(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 30, .none, "LD Z");
-}
-
-pub fn execLdY(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 28, .none, "LD Y");
-}
-
-pub fn execStZ(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 30, .none, "ST Z");
-}
-
-pub fn execStY(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 28, .none, "ST Y");
 }
 
 pub fn execJmp(cpu: *Cpu, opcode: u16) !void {
@@ -520,10 +482,13 @@ pub fn execLpm(cpu: *Cpu, opcode: u16) !void {
     const register_index = decode.decodeSingleRegister(opcode);
     const address = cpu.readRegisterWord(30);
     const value = try cpu.flash.readByte(address);
+
     cpu.r[register_index] = value;
+
     if ((opcode & 0x0001) != 0) {
         cpu.writeRegisterWord(30, address +% 1);
     }
+
     cpu.tracePrint("LPM r{} Z ; value=0x{x:0>2}\n", .{ register_index, value });
     cpu.pc += 1;
     cpu.cycles += constants.Cycles.lpm;
@@ -544,42 +509,6 @@ pub fn execBranch(cpu: *Cpu, opcode: u16, take_branch: bool, name: []const u8) !
         cpu.pc += 1;
         cpu.cycles += constants.Cycles.branch_not_taken;
     }
-}
-
-pub fn execLdPointer(cpu: *Cpu, opcode: u16, pointer_register: usize, mode: PointerMode, comptime name: []const u8) !void {
-    const register_index = decode.decodeSingleRegister(opcode);
-    var address = cpu.readRegisterWord(pointer_register);
-    if (mode == .predecrement) {
-        address -%= 1;
-        cpu.writeRegisterWord(pointer_register, address);
-    }
-    const displacement = if (pointer_register == 26) 0 else decode.decodeDisplacement(opcode);
-    const value = try cpu.readData(address +% displacement);
-    cpu.r[register_index] = value;
-    if (mode == .postincrement) {
-        cpu.writeRegisterWord(pointer_register, address +% 1);
-    }
-    cpu.tracePrint("{s} r{} ; value=0x{x:0>2}\n", .{ name, register_index, value });
-    cpu.pc += 1;
-    cpu.cycles += constants.Cycles.ld;
-}
-
-pub fn execStPointer(cpu: *Cpu, opcode: u16, pointer_register: usize, mode: PointerMode, comptime name: []const u8) !void {
-    const register_index = decode.decodeSingleRegister(opcode);
-    var address = cpu.readRegisterWord(pointer_register);
-    const value = cpu.r[register_index];
-    if (mode == .predecrement) {
-        address -%= 1;
-        cpu.writeRegisterWord(pointer_register, address);
-    }
-    const displacement = if (pointer_register == 26) 0 else decode.decodeDisplacement(opcode);
-    try cpu.writeData(address +% displacement, value);
-    if (mode == .postincrement) {
-        cpu.writeRegisterWord(pointer_register, address +% 1);
-    }
-    cpu.tracePrint("{s} r{} ; value=0x{x:0>2}\n", .{ name, register_index, value });
-    cpu.pc += 1;
-    cpu.cycles += constants.Cycles.st;
 }
 
 pub fn execSetInterruptFlag(cpu: *Cpu, enabled: bool, comptime name: []const u8) !void {
@@ -960,9 +889,11 @@ pub fn execIjmp(cpu: *Cpu, _: u16) !void {
 }
 
 pub fn execIcall(cpu: *Cpu, _: u16) !void {
-    const target = cpu.readRegisterWord(30);
+    const z = cpu.readRegisterWord(30);
+
+    const target = z;
+
     try cpu.pushReturnAddress(cpu.pc + 1);
-    cpu.tracePrint("ICALL -> 0x{x:0>4}\n", .{target});
     cpu.pc = target;
     cpu.cycles += 3;
 }
@@ -1033,38 +964,178 @@ pub fn execSpmZPlus(cpu: *Cpu, _: u16) !void {
     cpu.cycles += constants.Cycles.register;
 }
 
-// ─── LD Y± / LD Z± ──────────────────────────────────────────────────
+// ─── Pointer load/store helpers ──────────────────────────────────────
 
-pub fn execLdZPlus(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 30, .postincrement, "LD Z+");
+pub fn execLdPointer(
+    cpu: *Cpu,
+    opcode: u16,
+    pointer_register: usize,
+    mode: PointerMode,
+    comptime name: []const u8,
+    comptime use_displacement: bool,
+) !void {
+    const register_index = decode.decodeSingleRegister(opcode);
+
+    var address = cpu.readRegisterWord(pointer_register);
+
+    if (mode == .predecrement) {
+        address -%= 1;
+        cpu.writeRegisterWord(pointer_register, address);
+    }
+
+    const displacement: u16 =
+        if (use_displacement) decode.decodeDisplacement(opcode) else 0;
+
+    const read_address = address +% displacement;
+    const value = try cpu.readData(read_address);
+
+    cpu.r[register_index] = value;
+
+    if (mode == .postincrement) {
+        cpu.writeRegisterWord(pointer_register, address +% 1);
+    }
+
+    cpu.tracePrint("{s} r{} ; addr=0x{x:0>4} value=0x{x:0>2}\n", .{
+        name,
+        register_index,
+        read_address,
+        value,
+    });
+
+    cpu.pc += 1;
+    cpu.cycles += constants.Cycles.ld;
 }
 
-pub fn execLdMinusZ(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 30, .predecrement, "LD -Z");
+pub fn execStPointer(
+    cpu: *Cpu,
+    opcode: u16,
+    pointer_register: usize,
+    mode: PointerMode,
+    comptime name: []const u8,
+    comptime use_displacement: bool,
+) !void {
+    const register_index = decode.decodeSingleRegister(opcode);
+
+    var address = cpu.readRegisterWord(pointer_register);
+
+    if (mode == .predecrement) {
+        address -%= 1;
+        cpu.writeRegisterWord(pointer_register, address);
+    }
+
+    const displacement: u16 =
+        if (use_displacement) decode.decodeDisplacement(opcode) else 0;
+
+    const write_address = address +% displacement;
+    const value = cpu.r[register_index];
+
+    try cpu.writeData(write_address, value);
+
+    if (mode == .postincrement) {
+        cpu.writeRegisterWord(pointer_register, address +% 1);
+    }
+
+    cpu.tracePrint("{s} r{} ; addr=0x{x:0>4} value=0x{x:0>2}\n", .{
+        name,
+        register_index,
+        write_address,
+        value,
+    });
+
+    cpu.pc += 1;
+    cpu.cycles += constants.Cycles.st;
+}
+
+// ─── LD X / Y / Z plain, postincrement, predecrement ────────────────
+
+pub fn execLdX(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 26, .none, "LD X", false);
+}
+
+pub fn execLdXPlus(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 26, .postincrement, "LD X+", false);
+}
+
+pub fn execLdMinusX(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 26, .predecrement, "LD -X", false);
+}
+
+pub fn execLdY(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 28, .none, "LD Y", false);
 }
 
 pub fn execLdYPlus(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 28, .postincrement, "LD Y+");
+    try execLdPointer(cpu, opcode, 28, .postincrement, "LD Y+", false);
 }
 
 pub fn execLdMinusY(cpu: *Cpu, opcode: u16) !void {
-    try execLdPointer(cpu, opcode, 28, .predecrement, "LD -Y");
+    try execLdPointer(cpu, opcode, 28, .predecrement, "LD -Y", false);
 }
 
-// ─── ST Y± / ST Z± ──────────────────────────────────────────────────
-
-pub fn execStZPlus(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 30, .postincrement, "ST Z+");
+pub fn execLdZ(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 30, .none, "LD Z", false);
 }
 
-pub fn execStMinusZ(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 30, .predecrement, "ST -Z");
+pub fn execLdZPlus(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 30, .postincrement, "LD Z+", false);
+}
+
+pub fn execLdMinusZ(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 30, .predecrement, "LD -Z", false);
+}
+
+// ─── ST X / Y / Z plain, postincrement, predecrement ────────────────
+
+pub fn execStX(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 26, .none, "ST X", false);
+}
+
+pub fn execStXPlus(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 26, .postincrement, "ST X+", false);
+}
+
+pub fn execStMinusX(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 26, .predecrement, "ST -X", false);
+}
+
+pub fn execStY(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 28, .none, "ST Y", false);
 }
 
 pub fn execStYPlus(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 28, .postincrement, "ST Y+");
+    try execStPointer(cpu, opcode, 28, .postincrement, "ST Y+", false);
 }
 
 pub fn execStMinusY(cpu: *Cpu, opcode: u16) !void {
-    try execStPointer(cpu, opcode, 28, .predecrement, "ST -Y");
+    try execStPointer(cpu, opcode, 28, .predecrement, "ST -Y", false);
+}
+
+pub fn execStZ(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 30, .none, "ST Z", false);
+}
+
+pub fn execStZPlus(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 30, .postincrement, "ST Z+", false);
+}
+
+pub fn execStMinusZ(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 30, .predecrement, "ST -Z", false);
+}
+
+// ─── Displaced forms: LDD/STD Y+q and Z+q ───────────────────────────
+
+pub fn execLddY(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 28, .none, "LDD Y+q", true);
+}
+
+pub fn execLddZ(cpu: *Cpu, opcode: u16) !void {
+    try execLdPointer(cpu, opcode, 30, .none, "LDD Z+q", true);
+}
+
+pub fn execStdY(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 28, .none, "STD Y+q", true);
+}
+
+pub fn execStdZ(cpu: *Cpu, opcode: u16) !void {
+    try execStPointer(cpu, opcode, 30, .none, "STD Z+q", true);
 }

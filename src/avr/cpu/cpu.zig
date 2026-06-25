@@ -6,20 +6,24 @@ const decode = @import("decode.zig");
 const board_spec = @import("../../board/spec.zig");
 const mcu_spec = @import("../../mcu/spec.zig");
 const gpio_mod = @import("../gpio/gpio.zig");
+const usart_mod = @import("../usart/usart.zig");
 
 pub const Cpu = struct {
+    seen_main: bool = false,
+
     flash: *const memory.Flash,
 
     mcu: *const mcu_spec.McuSpec,
     board: *const board_spec.BoardSpec,
 
     r: [32]u8 = [_]u8{0} ** 32,
-    io: []u8,
-    sram: []u8,
-    timer0: timer.Timer0,
-    gpio: ?*gpio_mod.Gpio = null,
-    pc: u32 = 0,
+    data: memory.DataMemory,
 
+    timer0: timer.Timer0,
+    usart0: ?usart_mod.Usart = null,
+    gpio: ?*gpio_mod.Gpio = null,
+
+    pc: u32 = 0,
     sp: u16,
     sreg: u8 = 0,
     cycles: u64 = 0,
@@ -27,33 +31,38 @@ pub const Cpu = struct {
     quiet: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, board: *const board_spec.BoardSpec, flash: *const memory.Flash) !Cpu {
-        const io = try allocator.alloc(u8, board.mcu.io.size);
-        errdefer allocator.free(io);
-        @memset(io, 0);
+        var data = try memory.DataMemory.init(allocator, board.mcu);
+        errdefer data.deinit(allocator);
 
-        const sram = try allocator.alloc(u8, board.mcu.data.size);
-        errdefer allocator.free(sram);
-        @memset(sram, 0);
-
-        return Cpu{
+        var cpu = Cpu{
             .mcu = board.mcu,
             .board = board,
             .timer0 = timer.Timer0.init(board.mcu),
+            .usart0 = if (board.mcu.usart0) |usart0_spec|
+                usart_mod.Usart.init(usart0_spec)
+            else
+                null,
 
-            .io = io,
-            .sram = sram,
+            .data = data,
+
             .sp = board.mcu.sram.end,
 
             .flash = flash,
         };
+
+        try cpu.syncStackPointerRegisters();
+
+        return cpu;
     }
 
     pub fn deinit(self: *Cpu, allocator: std.mem.Allocator) void {
-        allocator.free(self.io);
-        allocator.free(self.sram);
+        self.data.deinit(allocator);
+    }
 
-        self.io = &[_]u8{};
-        self.sram = &[_]u8{};
+    fn peripheralBus(self: *Cpu) memory.PeripheralBus {
+        return .{
+            .usart0 = if (self.usart0) |*usart0| usart0 else null,
+        };
     }
 
     pub fn step(self: *Cpu) !void {
@@ -61,25 +70,9 @@ pub const Cpu = struct {
 
         const opcode = try self.fetch16(self.pc);
 
-        self.tracePrint("PC=0x{x:0>4} opcode=0x{x:0>4} ", .{
-            self.pc,
-            opcode,
-        });
-
         if (decode.decode(opcode)) |handler| {
             try handler(self, opcode);
         } else {
-            const byte_pc = self.pc * 2;
-
-            std.debug.print(
-                "[cpu] unknown opcode: pc_word=0x{x:0>4} pc_byte=0x{x:0>4} opcode=0x{x:0>4}\n",
-                .{
-                    self.pc,
-                    byte_pc,
-                    opcode,
-                },
-            );
-
             return error.UnimplementedOpcode;
         }
 
@@ -103,13 +96,26 @@ pub const Cpu = struct {
     }
 
     pub fn writeIo(self: *Cpu, address: usize, value: u8) !void {
-        if (address >= self.io.len) {
+        if (address >= self.mcu.io.size) {
             return error.IoAddressOutOfRange;
+        }
+
+        const io_address: u16 = @intCast(address);
+        const data_address = self.data.ioToDataAddress(io_address);
+
+        if (address == self.mcu.io.spl) {
+            try self.writeStackPointerLow(value);
+            return;
+        }
+
+        if (address == self.mcu.io.sph) {
+            try self.writeStackPointerHigh(value);
+            return;
         }
 
         if (address == self.mcu.io.sreg) {
             self.sreg = value;
-            self.io[address] = value;
+            try self.data.writeRawByte(data_address, value);
             return;
         }
 
@@ -117,8 +123,8 @@ pub const Cpu = struct {
             return;
         }
 
-        const old = self.io[address];
-        self.io[address] = value;
+        const old = try self.data.readRawByte(data_address);
+        try self.data.writeRawByte(data_address, value);
 
         if (self.gpio) |gpio| {
             gpio.handleIoWrite(address, old, value);
@@ -126,8 +132,16 @@ pub const Cpu = struct {
     }
 
     pub fn readIo(self: *Cpu, address: usize) !u8 {
-        if (address >= self.io.len) {
+        if (address >= self.mcu.io.size) {
             return error.IoAddressOutOfRange;
+        }
+
+        if (address == self.mcu.io.spl) {
+            return self.stackPointerLow();
+        }
+
+        if (address == self.mcu.io.sph) {
+            return self.stackPointerHigh();
         }
 
         if (address == self.mcu.io.sreg) {
@@ -138,7 +152,10 @@ pub const Cpu = struct {
             return value;
         }
 
-        return self.io[address];
+        const io_address: u16 = @intCast(address);
+        const data_address = self.data.ioToDataAddress(io_address);
+
+        return self.data.readRawByte(data_address);
     }
 
     pub fn readData(self: *Cpu, address: u16) !u8 {
@@ -146,20 +163,29 @@ pub const Cpu = struct {
             return self.r[address];
         }
 
-        const io_base = self.r.len;
-        if (address >= io_base and address < io_base + self.io.len) {
-            return try self.readIo(address - io_base);
+        const io_base: u16 = @intCast(self.r.len);
+        const io_size: u16 = @intCast(self.mcu.io.size);
+
+        if (address >= io_base and address < io_base + io_size) {
+            return try self.readIo(@intCast(address - io_base));
+        }
+
+        if (address == self.mcu.data.sreg) {
+            return self.sreg;
         }
 
         if (self.timer0.readData(address)) |value| {
             return value;
         }
 
-        if (address >= self.sram.len) {
-            return error.DataAddressOutOfRange;
+        var bus = self.peripheralBus();
+        if (self.usart0) |*usart0| {
+            if (usart0.handles(address)) {
+                const raw = try self.data.readRawByte(address);
+                return usart0.read(address, raw);
+            }
         }
-
-        return self.sram[address];
+        return self.data.readByte(address, &bus);
     }
 
     pub fn writeData(self: *Cpu, address: u16, value: u8) !void {
@@ -168,9 +194,17 @@ pub const Cpu = struct {
             return;
         }
 
-        const io_base = self.r.len;
-        if (address >= io_base and address < io_base + self.io.len) {
-            try self.writeIo(address - io_base, value);
+        const io_base: u16 = @intCast(self.r.len);
+        const io_size: u16 = @intCast(self.mcu.io.size);
+
+        if (address >= io_base and address < io_base + io_size) {
+            try self.writeIo(@intCast(address - io_base), value);
+            return;
+        }
+
+        if (address == self.mcu.data.sreg) {
+            self.sreg = value;
+            try self.data.writeRawByte(address, value);
             return;
         }
 
@@ -178,25 +212,41 @@ pub const Cpu = struct {
             return;
         }
 
-        if (address >= self.sram.len) {
-            return error.DataAddressOutOfRange;
+        var bus = self.peripheralBus();
+        if (self.usart0) |*usart0| {
+            if (usart0.handles(address)) {
+                try self.data.writeRawByte(address, value);
+
+                if (usart0.write(address, value, self.cycles, self.board.clock_hz)) {
+                    return;
+                }
+
+                return;
+            }
         }
 
-        self.sram[address] = value;
+        try self.data.writeByte(
+            address,
+            value,
+            self.cycles,
+            self.board.clock_hz,
+            &bus,
+        );
     }
 
     pub fn pushByte(self: *Cpu, value: u8) !void {
-        if (self.sp >= self.sram.len) {
+        if (self.sp >= self.data.bytes.len) {
             return error.StackPointerOutOfRange;
         }
 
-        self.sram[self.sp] = value;
+        try self.data.writeRawByte(self.sp, value);
 
         if (self.sp == 0) {
             return error.StackPointerOutOfRange;
         }
 
         self.sp -= 1;
+        try self.syncStackPointerRegisters();
     }
 
     pub fn popByte(self: *Cpu) !u8 {
@@ -205,12 +255,13 @@ pub const Cpu = struct {
         }
 
         self.sp += 1;
+        try self.syncStackPointerRegisters();
 
-        if (self.sp >= self.sram.len) {
+        if (self.sp >= self.data.bytes.len) {
             return error.StackPointerOutOfRange;
         }
 
-        return self.sram[self.sp];
+        return self.data.readRawByte(self.sp);
     }
 
     pub fn pushReturnAddress(self: *Cpu, address: u32) !void {
@@ -363,14 +414,24 @@ pub const Cpu = struct {
     }
 
     fn serviceInterrupts(self: *Cpu) !void {
-        const global_interrupts_enabled =
-            (self.sreg & (@as(u8, 1) << constants.Sreg.i)) != 0;
-
-        if (!global_interrupts_enabled) return;
+        if (!self.getFlag(constants.Sreg.i)) {
+            return;
+        }
 
         if (self.timer0.overflowInterruptPending()) {
             self.timer0.acceptOverflowInterrupt();
             try self.fireInterrupt(self.mcu.vectors.timer0_ovf_word_addr);
+            return;
+        }
+
+        if (self.usart0) |*usart0| {
+            const ucsrb = self.data.readRawByte(usart0.spec.ucsrb) catch 0;
+            const udre_enabled = usart0.dataRegisterEmptyInterruptEnabled(ucsrb);
+
+            if (udre_enabled and usart0.dataRegisterEmpty()) {
+                try self.fireInterrupt(self.mcu.vectors.usart_udre_word_addr);
+                return;
+            }
         }
     }
 
@@ -384,5 +445,28 @@ pub const Cpu = struct {
         self.pc = vector_word;
         self.cycles += constants.Cycles.interrupt_entry;
         self.timer0.tick(constants.Cycles.interrupt_entry);
+    }
+
+    fn stackPointerLow(self: *const Cpu) u8 {
+        return @as(u8, @intCast(self.sp & 0x00ff));
+    }
+
+    fn stackPointerHigh(self: *const Cpu) u8 {
+        return @as(u8, @intCast((self.sp >> 8) & 0x00ff));
+    }
+
+    fn writeStackPointerLow(self: *Cpu, value: u8) !void {
+        self.sp = (self.sp & 0xff00) | @as(u16, value);
+        try self.syncStackPointerRegisters();
+    }
+
+    fn writeStackPointerHigh(self: *Cpu, value: u8) !void {
+        self.sp = (@as(u16, value) << 8) | (self.sp & 0x00ff);
+        try self.syncStackPointerRegisters();
+    }
+
+    fn syncStackPointerRegisters(self: *Cpu) !void {
+        try self.data.writeRawByte(self.mcu.data.spl, self.stackPointerLow());
+        try self.data.writeRawByte(self.mcu.data.sph, self.stackPointerHigh());
     }
 };

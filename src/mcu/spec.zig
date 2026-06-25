@@ -27,6 +27,8 @@ pub const IoSpec = struct {
     ocr0a: usize,
     ocr0b: usize,
 
+    spl: usize,
+    sph: usize,
     sreg: usize,
 };
 
@@ -34,6 +36,8 @@ pub const DataSpec = struct {
     size: usize,
     io_offset: u16,
 
+    spl: u16,
+    sph: u16,
     sreg: u16,
 
     pinb: u16,
@@ -74,12 +78,33 @@ pub const VectorSpec = struct {
     timer0_ovf_index: u16,
     timer0_ovf_word_addr: u16,
     timer0_ovf_byte_addr: u16,
+
+    usart_udre_index: u8,
+    usart_udre_word_addr: u16,
+    usart_udre_byte_addr: u16,
+};
+
+pub const UsartSpec = struct {
+    udr: u16,
+    ucsra: u16,
+    ucsrb: u16,
+    ucsrc: u16,
+    ubrrl: u16,
+    ubrrh: u16,
+
+    rxen_bit: u3,
+    txen_bit: u3,
+    udrie_bit: u3,
+
+    rxc_bit: u3,
+    txc_bit: u3,
+    udre_bit: u3,
+    u2x_bit: u3,
 };
 
 pub const McuSpec = struct {
     kind: McuKind,
     name: []const u8,
-
     flash: FlashSpec,
     sram: SramSpec,
     io: IoSpec,
@@ -87,6 +112,7 @@ pub const McuSpec = struct {
     timer0: Timer0Spec,
     vectors: VectorSpec,
     gpio_ports: []const GpioPortSpec,
+    usart0: ?UsartSpec,
 };
 
 pub const PortId = enum {

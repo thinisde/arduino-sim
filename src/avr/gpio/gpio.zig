@@ -1,23 +1,24 @@
 const std = @import("std");
 const board_spec = @import("../../board/spec.zig");
 const mcu_spec = @import("../../mcu/spec.zig");
+const memory = @import("../memory/memory.zig");
 
 pub const Gpio = struct {
     board: *const board_spec.BoardSpec,
     mcu: *const mcu_spec.McuSpec,
-    io: []u8,
+    data: *memory.DataMemory,
     cycles: *const u64,
     clock_hz: u64,
 
     pub fn init(
         board: *const board_spec.BoardSpec,
-        io: []u8,
+        data: *memory.DataMemory,
         cycles: *const u64,
     ) Gpio {
         return .{
             .board = board,
             .mcu = board.mcu,
-            .io = io,
+            .data = data,
             .clock_hz = board.clock_hz,
             .cycles = cycles,
         };
@@ -59,7 +60,6 @@ pub const Gpio = struct {
             if ((changed & mask) == 0) continue;
 
             const digital_pin = self.findDigitalPin(port.id, bit) orelse continue;
-
             const is_output = (new & mask) != 0;
 
             const seconds =
@@ -80,7 +80,7 @@ pub const Gpio = struct {
         old: u8,
         new: u8,
     ) void {
-        const ddr = self.io[port.ddr_io];
+        const ddr = self.data.readRawByte(port.ddr_data) catch 0;
         const changed = old ^ new;
 
         for (0..8) |bit_usize| {
@@ -91,7 +91,6 @@ pub const Gpio = struct {
             if ((ddr & mask) == 0) continue;
 
             const digital_pin = self.findDigitalPin(port.id, bit) orelse continue;
-
             const is_high = (new & mask) != 0;
 
             const seconds =
