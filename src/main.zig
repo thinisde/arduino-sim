@@ -7,8 +7,26 @@ const memory = @import("avr/memory/memory.zig");
 const hex = @import("loader/hex.zig");
 const cpu_mod = @import("avr/cpu/cpu.zig");
 const gpio_mod = @import("avr/gpio/gpio.zig");
+const real_time_throttle = @import("utils/real_time_throttle.zig");
 
 const default_board: board_spec.BoardKind = .arduino_uno;
+
+var stop_requested = std.atomic.Value(bool).init(false);
+
+fn handleSigint(sig: std.posix.SIG) callconv(.c) void {
+    _ = sig;
+    stop_requested.store(true, .release);
+}
+
+fn installSigintHandler() void {
+    const action: std.posix.Sigaction = .{
+        .handler = .{ .handler = handleSigint },
+        .flags = 0,
+        .mask = std.posix.sigemptyset(),
+    };
+
+    std.posix.sigaction(std.posix.SIG.INT, &action, null);
+}
 
 const Options = struct {
     path: []const u8,
@@ -16,11 +34,15 @@ const Options = struct {
     trace: bool = false,
     quiet: bool = false,
     selected_board_kind: board_spec.BoardKind = default_board,
+    run_forever: bool = false,
+    real_time: bool = true,
 };
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
+
+    installSigintHandler();
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
 
@@ -50,20 +72,44 @@ pub fn main(init: std.process.Init) !void {
     cpu.trace = options.trace;
     cpu.quiet = options.quiet;
 
-    var gpio = gpio_mod.Gpio.init(board, cpu.io);
+    var gpio = gpio_mod.Gpio.init(board, cpu.io, &cpu.cycles);
     cpu.gpio = &gpio;
+
+    const clock_hz: u64 = board.clock_hz;
+
+    var throttle = real_time_throttle.RealTimeThrottle.init(io, clock_hz);
 
     var step_count: usize = 0;
 
-    while (step_count < options.steps) : (step_count += 1) {
-        try cpu.step();
-    }
+    if (options.run_forever) {
+        while (!stop_requested.load(.acquire)) {
+            try cpu.step();
 
-    if (options.quiet) {
-        std.debug.print("Stopped after {} steps\n", .{options.steps});
-        std.debug.print("PC=0x{x:0>4} cycles={}\n", .{
+            if (options.real_time) {
+                try throttle.afterStep(cpu.cycles);
+            }
+        }
+    } else {
+        while (step_count < options.steps and !stop_requested.load(.acquire)) : (step_count += 1) {
+            try cpu.step();
+
+            if (options.real_time) {
+                try throttle.afterStep(cpu.cycles);
+            }
+        }
+    }
+    if (!options.quiet) {
+        const simulated_seconds =
+            @as(f64, @floatFromInt(cpu.cycles)) /
+            @as(f64, @floatFromInt(clock_hz));
+
+        const simulated_minutes = simulated_seconds / 60.0;
+
+        std.debug.print("PC=0x{x:0>4} cycles={} simulated_time={d:.9}s ({d:.12} min)\n", .{
             cpu.pc,
             cpu.cycles,
+            simulated_seconds,
+            simulated_minutes,
         });
     }
 }
@@ -77,6 +123,10 @@ fn parseOptions(args: []const []const u8) !Options {
 
         if (std.mem.eql(u8, arg, "--trace")) {
             options.trace = true;
+        } else if (std.mem.eql(u8, arg, "--run-forever")) {
+            options.run_forever = true;
+        } else if (std.mem.eql(u8, arg, "--disable-real-time")) {
+            options.real_time = false;
         } else if (std.mem.eql(u8, arg, "--quiet")) {
             options.quiet = true;
         } else if (std.mem.eql(u8, arg, "--steps")) {

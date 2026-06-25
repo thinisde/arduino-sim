@@ -6,15 +6,20 @@ pub const Gpio = struct {
     board: *const board_spec.BoardSpec,
     mcu: *const mcu_spec.McuSpec,
     io: []u8,
+    cycles: *const u64,
+    clock_hz: u64,
 
     pub fn init(
         board: *const board_spec.BoardSpec,
         io: []u8,
+        cycles: *const u64,
     ) Gpio {
         return .{
             .board = board,
             .mcu = board.mcu,
             .io = io,
+            .clock_hz = board.clock_hz,
+            .cycles = cycles,
         };
     }
 
@@ -57,7 +62,12 @@ pub const Gpio = struct {
 
             const is_output = (new & mask) != 0;
 
-            std.debug.print("[pin] D{} mode = {s}\n", .{
+            const seconds =
+                @as(f64, @floatFromInt(self.cycles.*)) /
+                @as(f64, @floatFromInt(self.clock_hz));
+
+            std.debug.print("[{d:.6}s] [pin] D{} mode = {s}\n", .{
+                seconds,
                 digital_pin,
                 if (is_output) "OUTPUT" else "INPUT",
             });
@@ -84,7 +94,12 @@ pub const Gpio = struct {
 
             const is_high = (new & mask) != 0;
 
-            std.debug.print("[pin] D{} = {s}\n", .{
+            const seconds =
+                @as(f64, @floatFromInt(self.cycles.*)) /
+                @as(f64, @floatFromInt(self.clock_hz));
+
+            std.debug.print("[{d:.6}s] [pin] D{} = {s}\n", .{
+                seconds,
                 digital_pin,
                 if (is_high) "HIGH" else "LOW",
             });

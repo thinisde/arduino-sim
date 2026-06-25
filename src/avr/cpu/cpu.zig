@@ -245,14 +245,40 @@ pub const Cpu = struct {
         self.setFlag(constants.Sreg.c, carry != 0);
     }
 
-    pub fn setSubtractFlags(self: *Cpu, left: u8, right: u8, preserve_zero: bool) void {
+    pub fn setSubtractFlags(
+        self: *Cpu,
+        left: u8,
+        right: u8,
+        preserve_zero: bool,
+    ) void {
         const result = left -% right;
-        const half_carry = ((~left & right) | (right & result) | (result & ~left)) & 0x08;
-        const overflow = ((left & ~right & ~result) | (~left & right & result)) & 0x80;
-        const carry = ((~left & right) | (right & result) | (result & ~left)) & 0x80;
+        self.setSubtractResultFlags(left, right, result, preserve_zero);
+    }
+
+    pub fn setSubtractResultFlags(
+        self: *Cpu,
+        left: u8,
+        right: u8,
+        result: u8,
+        preserve_zero: bool,
+    ) void {
+        const half_carry =
+            ((~left & right) | (right & result) | (result & ~left)) & 0x08;
+
+        const overflow =
+            ((left & ~right & ~result) | (~left & right & result)) & 0x80;
+
+        const carry =
+            ((~left & right) | (right & result) | (result & ~left)) & 0x80;
 
         self.setFlag(constants.Sreg.h, half_carry != 0);
-        self.setFlag(constants.Sreg.z, if (preserve_zero) self.getFlag(constants.Sreg.z) and result == 0 else result == 0);
+        self.setFlag(
+            constants.Sreg.z,
+            if (preserve_zero)
+                self.getFlag(constants.Sreg.z) and result == 0
+            else
+                result == 0,
+        );
         self.setFlag(constants.Sreg.n, (result & 0x80) != 0);
         self.setFlag(constants.Sreg.v, overflow != 0);
         self.setFlag(constants.Sreg.s, self.getFlag(constants.Sreg.n) != self.getFlag(constants.Sreg.v));
@@ -331,7 +357,7 @@ pub const Cpu = struct {
             return error.InstructionDidNotAdvanceCycles;
         }
 
-        self.timer0.tick(@intCast(elapsed));
+        self.timer0.tick(elapsed);
 
         try self.serviceInterrupts();
     }

@@ -232,11 +232,16 @@ pub fn execAdd(cpu: *Cpu, opcode: u16) !void {
 pub fn execAdc(cpu: *Cpu, opcode: u16) !void {
     const destination = decode.decodeDestinationRegister(opcode);
     const source = decode.decodeSourceRegister(opcode);
+
+    const left = cpu.r[destination];
+    const right = cpu.r[source];
     const carry: u8 = if (cpu.getFlag(constants.Sreg.c)) 1 else 0;
-    const right = cpu.r[source] +% carry;
-    const result = cpu.r[destination] +% right;
-    cpu.setAddFlags(cpu.r[destination], right, result);
+
+    const result = left +% right +% carry;
+
+    cpu.setAddFlags(left, right, result);
     cpu.r[destination] = result;
+
     cpu.tracePrint("ADC r{} r{} ; value=0x{x:0>2}\n", .{ destination, source, result });
     cpu.pc += 1;
     cpu.cycles += constants.Cycles.register;
@@ -256,16 +261,20 @@ pub fn execSub(cpu: *Cpu, opcode: u16) !void {
 pub fn execSbc(cpu: *Cpu, opcode: u16) !void {
     const destination = decode.decodeDestinationRegister(opcode);
     const source = decode.decodeSourceRegister(opcode);
+
+    const left = cpu.r[destination];
+    const right = cpu.r[source];
     const carry: u8 = if (cpu.getFlag(constants.Sreg.c)) 1 else 0;
-    const right = cpu.r[source] +% carry;
-    const result = cpu.r[destination] -% right;
-    cpu.setSubtractFlags(cpu.r[destination], right, true);
+
+    const result = left -% right -% carry;
+
+    cpu.setSubtractResultFlags(left, right, result, true);
     cpu.r[destination] = result;
+
     cpu.tracePrint("SBC r{} r{} ; value=0x{x:0>2}\n", .{ destination, source, result });
     cpu.pc += 1;
     cpu.cycles += constants.Cycles.register;
 }
-
 pub fn execOri(cpu: *Cpu, opcode: u16) !void {
     const register_index = decode.decodeImmediateRegister(opcode);
     const value = decode.decodeImmediate(opcode);
@@ -290,13 +299,17 @@ pub fn execSubi(cpu: *Cpu, opcode: u16) !void {
 
 pub fn execSbci(cpu: *Cpu, opcode: u16) !void {
     const register_index = decode.decodeImmediateRegister(opcode);
-    const value = decode.decodeImmediate(opcode);
+
+    const left = cpu.r[register_index];
+    const right = decode.decodeImmediate(opcode);
     const carry: u8 = if (cpu.getFlag(constants.Sreg.c)) 1 else 0;
-    const right = value +% carry;
-    const result = cpu.r[register_index] -% right;
-    cpu.setSubtractFlags(cpu.r[register_index], right, true);
+
+    const result = left -% right -% carry;
+
+    cpu.setSubtractResultFlags(left, right, result, true);
     cpu.r[register_index] = result;
-    cpu.tracePrint("SBCI r{} 0x{x:0>2} ; value=0x{x:0>2}\n", .{ register_index, value, result });
+
+    cpu.tracePrint("SBCI r{} 0x{x:0>2} ; value=0x{x:0>2}\n", .{ register_index, right, result });
     cpu.pc += 1;
     cpu.cycles += constants.Cycles.register;
 }
@@ -434,8 +447,15 @@ pub fn execCp(cpu: *Cpu, opcode: u16) !void {
 pub fn execCpc(cpu: *Cpu, opcode: u16) !void {
     const destination = decode.decodeDestinationRegister(opcode);
     const source = decode.decodeSourceRegister(opcode);
+
+    const left = cpu.r[destination];
+    const right = cpu.r[source];
     const carry: u8 = if (cpu.getFlag(constants.Sreg.c)) 1 else 0;
-    cpu.setSubtractFlags(cpu.r[destination], cpu.r[source] +% carry, true);
+
+    const result = left -% right -% carry;
+
+    cpu.setSubtractResultFlags(left, right, result, true);
+
     cpu.tracePrint("CPC r{} r{}\n", .{ destination, source });
     cpu.pc += 1;
     cpu.cycles += constants.Cycles.register;
