@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const RealTimeThrottle = struct {
     const check_every_steps: usize = 1000;
+    const min_sleep_ns: u64 = std.time.ns_per_ms;
 
     io: std.Io,
     clock_hz: u64,
@@ -27,28 +28,32 @@ pub const RealTimeThrottle = struct {
 
         self.steps_until_check = check_every_steps;
 
-        const simulated_ns_u128 =
+        const simulated_elapsed_ns =
             (@as(u128, cycles) * @as(u128, std.time.ns_per_s)) /
             @as(u128, self.clock_hz);
 
-        const real_ns_i = self.start_time.untilNow(self.io, .awake).toNanoseconds();
+        const real_elapsed_ns = self.start_time.untilNow(self.io, .awake).toNanoseconds();
 
-        if (real_ns_i <= 0) {
+        if (real_elapsed_ns <= 0) {
             return;
         }
 
-        const real_ns: u128 = @intCast(real_ns_i);
+        const real_elapsed_ns_u128: u128 = @intCast(real_elapsed_ns);
 
-        if (simulated_ns_u128 <= @as(u128, real_ns)) {
+        if (simulated_elapsed_ns <= real_elapsed_ns_u128) {
             return;
         }
 
-        const sleep_ns_u128 = simulated_ns_u128 - @as(u128, real_ns);
+        const sleep_ns_u128 = simulated_elapsed_ns - real_elapsed_ns_u128;
 
         const sleep_ns: u64 = if (sleep_ns_u128 > @as(u128, std.math.maxInt(u64)))
             std.math.maxInt(u64)
         else
             @intCast(sleep_ns_u128);
+
+        if (sleep_ns < min_sleep_ns) {
+            return;
+        }
 
         try self.io.sleep(.fromNanoseconds(sleep_ns), .awake);
     }

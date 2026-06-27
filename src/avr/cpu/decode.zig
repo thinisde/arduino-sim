@@ -261,3 +261,380 @@ pub fn decodeDisplacement(opcode: u16) u16 {
 
     return @as(u16, @intCast(q0_2 | q3_4 | q5));
 }
+
+const testing = @import("std").testing;
+
+test "decode NOP" {
+    try testing.expect(decode(0x0000) != null);
+    try testing.expectEqualStrings("NOP", table[0].name);
+}
+
+test "decode RJMP" {
+    try testing.expect(decode(0xc000) != null);
+    try testing.expect(decode(0xcfff) != null);
+    try testing.expect(decode(0x8000) == null);
+}
+
+test "decode BRNE" {
+    const brne_opcode: u16 = 0xf401;
+    try testing.expect(decode(brne_opcode) != null);
+}
+
+test "decode BREQ" {
+    const breq_opcode: u16 = 0xf001;
+    try testing.expect(decode(breq_opcode) != null);
+}
+
+test "decode LDI" {
+    const ldi_r16_0xff: u16 = 0xef0f;
+    try testing.expect(decode(ldi_r16_0xff) != null);
+    try testing.expectEqual(@as(usize, 16), decodeImmediateRegister(ldi_r16_0xff));
+    try testing.expectEqual(@as(u8, 0xff), decodeImmediate(ldi_r16_0xff));
+}
+
+test "decode LDI r31=0xaa" {
+    const opcode: u16 = 0xefaa;
+    try testing.expectEqual(@as(usize, 31), decodeImmediateRegister(opcode));
+    try testing.expectEqual(@as(u8, 0xaa), decodeImmediate(opcode));
+}
+
+test "decode OUT" {
+    const out_portb_r16: u16 = 0xb905;
+    try testing.expect(decode(out_portb_r16) != null);
+    try testing.expectEqual(@as(usize, 0x05), decodeIoAddress(out_portb_r16));
+    try testing.expectEqual(@as(usize, 16), decodeIoRegister(out_portb_r16));
+}
+
+test "decode IN" {
+    const in_r16_pinb: u16 = 0xb103;
+    try testing.expect(decode(in_r16_pinb) != null);
+    try testing.expectEqual(@as(usize, 0x03), decodeIoAddress(in_r16_pinb));
+    try testing.expectEqual(@as(usize, 16), decodeIoRegister(in_r16_pinb));
+}
+
+test "decode SBI" {
+    const sbi_portb_5: u16 = 0x9a2d;
+    try testing.expect(decode(sbi_portb_5) != null);
+    try testing.expectEqual(@as(usize, 0x05), decodeBitIoAddress(sbi_portb_5));
+    try testing.expectEqual(@as(u3, 5), decodeBitIoBit(sbi_portb_5));
+}
+
+test "decode CBI" {
+    try testing.expect(decode(0x982d) != null);
+}
+
+test "decode ADD" {
+    const add_r0_r1: u16 = 0x0c01;
+    try testing.expect(decode(add_r0_r1) != null);
+    try testing.expectEqual(@as(usize, 0), decodeDestinationRegister(add_r0_r1));
+    try testing.expectEqual(@as(usize, 1), decodeSourceRegister(add_r0_r1));
+}
+
+test "decode ADC" {
+    try testing.expect(decode(0x1c34) != null);
+}
+
+test "decode SUB" {
+    try testing.expect(decode(0x1812) != null);
+}
+
+test "decode SUBI" {
+    const subi_r16_1: u16 = 0x5001;
+    try testing.expect(decode(subi_r16_1) != null);
+}
+
+test "decode SBCI" {
+    try testing.expect(decode(0x40ff) != null);
+}
+
+test "decode MOV" {
+    const mov_r0_r1: u16 = 0x2c01;
+    try testing.expect(decode(mov_r0_r1) != null);
+}
+
+test "decode INC" {
+    try testing.expect(decode(0x9403) != null);
+    try testing.expectEqual(@as(usize, 0), decodeSingleRegister(0x9403));
+    try testing.expectEqual(@as(usize, 16), decodeSingleRegister(0x9513));
+}
+
+test "decode DEC" {
+    try testing.expect(decode(0x940a) != null);
+}
+
+test "decode PUSH" {
+    try testing.expect(decode(0x920f) != null);
+}
+
+test "decode POP" {
+    try testing.expect(decode(0x900f) != null);
+}
+
+test "decode CALL" {
+    try testing.expect(decode(0x940e) != null);
+}
+
+test "decode JMP" {
+    try testing.expect(decode(0x940c) != null);
+}
+
+test "decode RCALL" {
+    try testing.expect(decode(0xd000) != null);
+}
+
+test "decode ADIW" {
+    const adiw_r24_0x3f: u16 = 0x963f;
+    try testing.expect(decode(adiw_r24_0x3f) != null);
+    try testing.expectEqual(@as(usize, 24), decodeWordImmediateRegister(adiw_r24_0x3f));
+    try testing.expectEqual(@as(u16, 0x3f), decodeWordImmediate(adiw_r24_0x3f));
+}
+
+test "decode SBIW" {
+    try testing.expect(decode(0x973f) != null);
+}
+
+test "decode CPI" {
+    try testing.expect(decode(0x30ff) != null);
+}
+
+test "decode CP" {
+    try testing.expect(decode(0x1401) != null);
+}
+
+test "decode CPC" {
+    try testing.expect(decode(0x0401) != null);
+}
+
+test "decode EOR" {
+    try testing.expect(decode(0x2401) != null);
+}
+
+test "decode AND" {
+    try testing.expect(decode(0x2001) != null);
+}
+
+test "decode OR" {
+    try testing.expect(decode(0x2801) != null);
+}
+
+test "decode ORI" {
+    try testing.expect(decode(0x60ff) != null);
+}
+
+test "decode ANDI" {
+    try testing.expect(decode(0x70ff) != null);
+}
+
+test "decode LSL" {
+    try testing.expect(decode(0x0c66) != null);
+}
+
+test "decode ROL" {
+    try testing.expect(decode(0x1c66) != null);
+}
+
+test "decode MOVW" {
+    const movw_r0_r2: u16 = 0x0101;
+    try testing.expect(decode(movw_r0_r2) != null);
+    try testing.expectEqual(@as(usize, 0), decodeMovwDestination(movw_r0_r2));
+    try testing.expectEqual(@as(usize, 2), decodeMovwSource(movw_r0_r2));
+}
+
+test "decode MUL" {
+    try testing.expect(decode(0x9c01) != null);
+}
+
+test "decode MULS" {
+    try testing.expect(decode(0x0200) != null);
+}
+
+test "decode MULSU" {
+    try testing.expect(decode(0x0300) != null);
+}
+
+test "decode LDS" {
+    try testing.expect(decode(0x9000) != null);
+}
+
+test "decode STS" {
+    try testing.expect(decode(0x9200) != null);
+}
+
+test "decode SWAP" {
+    try testing.expect(decode(0x9402) != null);
+}
+
+test "decode LSR" {
+    try testing.expect(decode(0x9406) != null);
+}
+
+test "decode ROR" {
+    try testing.expect(decode(0x9407) != null);
+}
+
+test "decode ASR" {
+    try testing.expect(decode(0x9405) != null);
+}
+
+test "decode COM" {
+    try testing.expect(decode(0x9400) != null);
+}
+
+test "decode NEG" {
+    try testing.expect(decode(0x9401) != null);
+}
+
+test "decode BSET" {
+    try testing.expect(decode(0x9408) != null);
+}
+
+test "decode BCLR" {
+    try testing.expect(decode(0x9488) != null);
+}
+
+test "decode SBRC" {
+    try testing.expect(decode(0xfc00) != null);
+}
+
+test "decode SBRS" {
+    try testing.expect(decode(0xfe00) != null);
+}
+
+test "decode BST" {
+    try testing.expect(decode(0xfa00) != null);
+}
+
+test "decode BLD" {
+    try testing.expect(decode(0xf800) != null);
+}
+
+test "decode SLEEP" {
+    try testing.expect(decode(0x9588) != null);
+}
+
+test "decode WDR" {
+    try testing.expect(decode(0x95a8) != null);
+}
+
+test "decode BREAK" {
+    try testing.expect(decode(0x9598) != null);
+}
+
+test "decode LPM implicit" {
+    try testing.expect(decode(0x95c8) != null);
+}
+
+test "decode LPM Z" {
+    try testing.expect(decode(0x9004) != null);
+}
+
+test "decode ELPM Z" {
+    try testing.expect(decode(0x9006) != null);
+}
+
+test "decode ELPM Z+" {
+    try testing.expect(decode(0x9007) != null);
+}
+
+test "decode ICALL" {
+    try testing.expect(decode(0x9509) != null);
+}
+
+test "decode IJMP" {
+    try testing.expect(decode(0x9409) != null);
+}
+
+test "decode EICALL" {
+    try testing.expect(decode(0x9519) != null);
+}
+
+test "decode EIJMP" {
+    try testing.expect(decode(0x9419) != null);
+}
+
+test "decode XCH" {
+    try testing.expect(decode(0x9204) != null);
+}
+
+test "decode LAS" {
+    try testing.expect(decode(0x9205) != null);
+}
+
+test "decode LAC" {
+    try testing.expect(decode(0x9206) != null);
+}
+
+test "decode LAT" {
+    try testing.expect(decode(0x9207) != null);
+}
+
+test "decode unknown opcode returns null" {
+    try testing.expect(decode(0xffff) == null);
+}
+
+test "isTwoWordInstruction CALL" {
+    try testing.expect(isTwoWordInstruction(0x940e));
+}
+
+test "isTwoWordInstruction JMP" {
+    try testing.expect(isTwoWordInstruction(0x940c));
+}
+
+test "isTwoWordInstruction LDS" {
+    try testing.expect(isTwoWordInstruction(0x9000));
+}
+
+test "isTwoWordInstruction STS" {
+    try testing.expect(isTwoWordInstruction(0x9200));
+}
+
+test "isTwoWordInstruction NOP is single word" {
+    try testing.expect(!isTwoWordInstruction(0x0000));
+}
+
+test "isTwoWordInstruction RJMP is single word" {
+    try testing.expect(!isTwoWordInstruction(0xc000));
+}
+
+test "bitMask" {
+    try testing.expectEqual(@as(u8, 0x01), bitMask(0));
+    try testing.expectEqual(@as(u8, 0x02), bitMask(1));
+    try testing.expectEqual(@as(u8, 0x80), bitMask(7));
+}
+
+test "decodeAbsolute22" {
+    const opcode: u16 = 0x940c;
+    const next_word: u16 = 0x1234;
+    const result = decodeAbsolute22(opcode, next_word);
+    try testing.expectEqual(@as(u32, 0x1234), result);
+}
+
+test "decodeRelative12 positive" {
+    const result = decodeRelative12(0xc005);
+    try testing.expectEqual(@as(i32, 5), result);
+}
+
+test "decodeRelative12 negative" {
+    const result = decodeRelative12(0xcfff);
+    try testing.expectEqual(@as(i32, -1), result);
+}
+
+test "decodeRelative7 positive" {
+    const result = decodeRelative7(0xf008);
+    try testing.expectEqual(@as(i32, 1), result);
+}
+
+test "decodeRelative7 negative" {
+    const result = decodeRelative7(0xf078);
+    try testing.expectEqual(@as(i32, -1), result);
+}
+
+test "decodeDisplacement" {
+    const result = decodeDisplacement(0x8000);
+    try testing.expectEqual(@as(u16, 0), result);
+}
+
+test "decodeDisplacement max" {
+    const result = decodeDisplacement(0x23ff);
+    try testing.expectEqual(@as(u16, 63), result);
+}
