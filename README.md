@@ -42,12 +42,7 @@ Supported or partially supported:
 
 Known limitations or incomplete areas:
 
-* USART model is still simplified
-
-  * no accurate baud-rate timing yet
-  * no real TX shift-register timing
-  * no detailed error flag behavior such as frame error, parity error, or overrun
-  * terminal raw/no-echo mode still needs cleanup
+* USART line-level waveform/noise behavior is still simplified
 * ADC
 * PWM
 * Timer1
