@@ -9,7 +9,7 @@ const cpu_mod = @import("avr/cpu/cpu.zig");
 const gpio_mod = @import("avr/gpio/gpio.zig");
 
 const real_time_throttle = @import("utils/real_time_throttle.zig");
-const terminal_input = @import("utils/terminal_input.zig");
+const terminal = @import("utils/usart.zig");
 
 const default_board: board_spec.BoardKind = .arduino_uno;
 
@@ -43,7 +43,9 @@ const Options = struct {
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
-    const io = init.io;
+    const io: std.Io = init.io;
+
+    const start: std.Io.Timestamp = std.Io.Clock.real.now(io);
 
     installSigintHandler();
 
@@ -82,7 +84,7 @@ pub fn main(init: std.process.Init) !void {
 
     var throttle = real_time_throttle.RealTimeThrottle.init(io, clock_hz);
 
-    var terminal_mode = terminal_input.TerminalMode{};
+    var terminal_mode = terminal.TerminalMode{};
     defer terminal_mode.restore();
 
     if (options.serial_raw) {
@@ -93,7 +95,13 @@ pub fn main(init: std.process.Init) !void {
 
     if (options.run_forever) {
         while (!stop_requested.load(.acquire)) {
+            terminal.sliceUsarts(&cpu);
+            if ((step_count & 0x0fff) == 0) { // every 4096 instructions
+                try terminal.pumpTerminalInput(&cpu);
+            }
+
             try cpu.step();
+            step_count += 1;
 
             if (options.real_time) {
                 try throttle.afterStep(cpu.cycles);
@@ -101,8 +109,9 @@ pub fn main(init: std.process.Init) !void {
         }
     } else {
         while (step_count < options.steps and !stop_requested.load(.acquire)) : (step_count += 1) {
+            terminal.sliceUsarts(&cpu);
             if ((step_count & 0x0fff) == 0) { // every 4096 instructions
-                try terminal_input.pumpTerminalInput(&cpu);
+                try terminal.pumpTerminalInput(&cpu);
             }
             try cpu.step();
 
@@ -111,18 +120,23 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
+
+    terminal.sliceUsarts(&cpu);
+
     if (!options.quiet) {
+        const untilNow = start.untilNow(io, std.Io.Clock.real);
+        const program_seconds = @as(f64, @floatFromInt(untilNow.toNanoseconds())) / 1e9;
+
         const simulated_seconds =
             @as(f64, @floatFromInt(cpu.cycles)) /
             @as(f64, @floatFromInt(clock_hz));
 
-        const simulated_minutes = simulated_seconds / 60.0;
+        std.debug.print("program_time={d:.3}s\n", .{program_seconds});
 
-        std.debug.print("PC=0x{x:0>4} cycles={} simulated_time={d:.9}s ({d:.12} min)\n", .{
+        std.debug.print("PC=0x{x:0>4} cycles={} simulated_time={d:.6}s\n", .{
             cpu.pc,
             cpu.cycles,
             simulated_seconds,
-            simulated_minutes,
         });
     }
 }
