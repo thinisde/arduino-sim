@@ -52,7 +52,7 @@ pub const Timer = struct {
         };
     }
 
-    fn lowByte(value: u16) u8 {
+    pub fn lowByte(value: u16) u8 {
         return @truncate(value);
     }
 
@@ -175,7 +175,7 @@ pub const Timer = struct {
         return false;
     }
 
-    fn prescaler(self: *const Timer) ?u16 {
+    pub fn prescaler(self: *const Timer) ?u16 {
         const cs = self.tccrb & self.spec.cs_mask;
 
         if (cs == self.spec.stopped) return null;
@@ -252,122 +252,4 @@ pub const Timer = struct {
         self.last_ovf_cycle = total_cycles;
     }
 };
-
-const testing = std.testing;
-const timer0_spec = @import("../../mcu/atmega328p.zig").timer0;
-
-test "init timer" {
-    const timer = Timer.init(&timer0_spec);
-    try testing.expectEqual(@as(u8, 0), Timer.lowByte(timer.tcnt));
-    try testing.expectEqual(@as(u16, 0), timer.tcnt);
-    try testing.expectEqual(@as(u8, 0), timer.tifr);
-    try testing.expectEqual(@as(u8, 0), timer.timsk);
-}
-
-test "prescaler stopped" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.stopped;
-    try testing.expectEqual(@TypeOf(null), @TypeOf(timer.prescaler()));
-    try testing.expect(timer.prescaler() == null);
-}
-
-test "prescaler 1" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_1.?;
-    try testing.expectEqual(@as(u16, 1), timer.prescaler().?);
-}
-
-test "prescaler 8" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_8.?;
-    try testing.expectEqual(@as(u16, 8), timer.prescaler().?);
-}
-
-test "prescaler 64" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_64.?;
-    try testing.expectEqual(@as(u16, 64), timer.prescaler().?);
-}
-
-test "prescaler 256" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_256.?;
-    try testing.expectEqual(@as(u16, 256), timer.prescaler().?);
-}
-
-test "prescaler 1024" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_1024.?;
-    try testing.expectEqual(@as(u16, 1024), timer.prescaler().?);
-}
-
-test "tick increments counter" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_1.?;
-    timer.tick(1);
-    try testing.expectEqual(@as(u16, 1), timer.tcnt);
-}
-
-test "tick prescaler accumulate" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_8.?;
-    timer.tick(7);
-    try testing.expectEqual(@as(u16, 0), timer.tcnt);
-    timer.tick(1);
-    try testing.expectEqual(@as(u16, 1), timer.tcnt);
-}
-
-test "tick overflow sets TOV" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.prescale_1.?;
-    timer.tcnt = timer0_spec.max;
-    timer.tick(1);
-    try testing.expectEqual(@as(u16, 0), timer.tcnt);
-    try testing.expect((timer.tifr & (@as(u8, 1) << timer0_spec.tov_bit)) != 0);
-}
-
-test "overflow interrupt pending" {
-    var timer = Timer.init(&timer0_spec);
-    try testing.expect(!timer.overflowInterruptPending());
-    timer.tifr |= @as(u8, 1) << timer0_spec.tov_bit;
-    try testing.expect(!timer.overflowInterruptPending());
-    timer.timsk |= @as(u8, 1) << timer0_spec.toie_bit;
-    try testing.expect(timer.overflowInterruptPending());
-}
-
-test "accept overflow interrupt clears TOV" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tifr |= @as(u8, 1) << timer0_spec.tov_bit;
-    timer.timsk |= @as(u8, 1) << timer0_spec.toie_bit;
-    try testing.expect(timer.overflowInterruptPending());
-    timer.acceptOverflowInterrupt();
-    try testing.expect(!timer.overflowInterruptPending());
-    try testing.expectEqual(@as(u8, 0), timer.tifr & (@as(u8, 1) << timer0_spec.tov_bit));
-}
-
-test "tifr write clears flags" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tifr = 0xff;
-    _ = timer.write(timer0_spec.tifr.?, 0x0f, 0);
-    try testing.expectEqual(@as(u8, 0xf0), timer.tifr);
-}
-
-test "tick stopped timer does nothing" {
-    var timer = Timer.init(&timer0_spec);
-    timer.tccrb = timer0_spec.stopped;
-    timer.tcnt = 100;
-    timer.tick(1000);
-    try testing.expectEqual(@as(u16, 100), timer.tcnt);
-}
-
-test "handles known address" {
-    var timer = Timer.init(&timer0_spec);
-    try testing.expect(timer.handles(timer0_spec.tcntl.?));
-    try testing.expect(timer.handles(timer0_spec.tifr.?));
-}
-
-test "handles unknown address" {
-    var timer = Timer.init(&timer0_spec);
-    try testing.expect(!timer.handles(0xffff));
-}
 

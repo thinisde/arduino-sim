@@ -78,7 +78,7 @@ pub const gpio_ports = [_]mcu.GpioPortSpec{
     },
 };
 
-const usart0 = mcu.UsartSpec{
+pub const usart0 = mcu.UsartSpec{
     .index = 0,
 
     .udr = 0x00c6,

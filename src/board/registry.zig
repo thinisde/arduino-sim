@@ -15,27 +15,3 @@ pub fn parse(name: []const u8) ?board.BoardKind {
 
 const std = @import("std");
 
-const testing = std.testing;
-
-test "get arduino_uno" {
-    const b = get(.arduino_uno);
-    try testing.expectEqualStrings("Arduino Uno", b.name);
-    try testing.expectEqual(@as(u32, 16_000_000), b.clock_hz);
-}
-
-test "parse 'arduino-uno'" {
-    try testing.expectEqual(board.BoardKind.arduino_uno, parse("arduino-uno").?);
-}
-
-test "parse 'uno'" {
-    try testing.expectEqual(board.BoardKind.arduino_uno, parse("uno").?);
-}
-
-test "parse unknown" {
-    try testing.expect(parse("mega2560") == null);
-}
-
-test "parse empty" {
-    try testing.expect(parse("") == null);
-}
-

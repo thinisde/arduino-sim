@@ -105,7 +105,7 @@ pub const Gpio = struct {
         }
     }
 
-    fn findDigitalPin(
+    pub fn findDigitalPin(
         self: *const Gpio,
         port: mcu_spec.PortId,
         bit: u3,
@@ -119,42 +119,8 @@ pub const Gpio = struct {
         return null;
     }
 
-    fn bitMask(bit: u3) u8 {
+    pub fn bitMask(bit: u3) u8 {
         return @as(u8, 1) << bit;
     }
 };
-
-const testing = std.testing;
-const test_board = @import("../../board/arduino_uno.zig");
-const mem = @import("../memory/memory.zig");
-
-test "gpio bitMask" {
-    try testing.expectEqual(@as(u8, 0x01), Gpio.bitMask(0));
-    try testing.expectEqual(@as(u8, 0x04), Gpio.bitMask(2));
-    try testing.expectEqual(@as(u8, 0x80), Gpio.bitMask(7));
-}
-
-test "findDigitalPin D13 = index 13" {
-    var data = try mem.DataMemory.init(testing.allocator, &test_board.spec.mcu);
-    defer data.deinit(testing.allocator);
-    var cycles: u64 = 0;
-    var gpio = Gpio.init(&test_board.spec, &data, &cycles);
-    try testing.expectEqual(@as(usize, 13), gpio.findDigitalPin(.B, 5).?);
-}
-
-test "findDigitalPin D0 = index 0" {
-    var data = try mem.DataMemory.init(testing.allocator, &test_board.spec.mcu);
-    defer data.deinit(testing.allocator);
-    var cycles: u64 = 0;
-    var gpio = Gpio.init(&test_board.spec, &data, &cycles);
-    try testing.expectEqual(@as(usize, 0), gpio.findDigitalPin(.D, 0).?);
-}
-
-test "findDigitalPin undefined returns null" {
-    var data = try mem.DataMemory.init(testing.allocator, &test_board.spec.mcu);
-    defer data.deinit(testing.allocator);
-    var cycles: u64 = 0;
-    var gpio = Gpio.init(&test_board.spec, &data, &cycles);
-    try testing.expect(gpio.findDigitalPin(.C, 7) == null);
-}
 
