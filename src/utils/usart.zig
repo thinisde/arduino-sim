@@ -7,13 +7,17 @@ pub const TerminalMode = struct {
     original: std.posix.termios = undefined,
 
     pub fn enableRaw(self: *TerminalMode) !void {
-        if (!std.posix.isatty(std.posix.STDIN_FILENO)) {
-            return null;
-        }
+        const stdin_fd = std.posix.STDIN_FILENO;
 
-        self.original = try std.posix.tcgetattr(std.posix.STDIN_FILENO);
+        const original = std.posix.tcgetattr(stdin_fd) catch |err| switch (err) {
+            error.NotATerminal => {
+                std.debug.print("NOT A TERMINAL", .{});
+                return;
+            },
+            else => return err,
+        };
 
-        var raw = self.original;
+        var raw = original;
 
         raw.iflag.BRKINT = false;
         raw.iflag.ICRNL = false;
@@ -36,6 +40,8 @@ pub const TerminalMode = struct {
 
         try std.posix.tcsetattr(std.posix.STDIN_FILENO, .FLUSH, raw);
         self.enabled = true;
+
+        self.original = original;
     }
 
     pub fn restore(self: *TerminalMode) void {
