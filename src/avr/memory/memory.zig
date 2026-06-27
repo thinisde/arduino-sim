@@ -2,6 +2,7 @@ const std = @import("std");
 const constants = @import("../constants/constants.zig");
 const mcu_spec = @import("../../mcu/spec.zig");
 const usart_mod = @import("../usart/usart.zig");
+const timer_mod = @import("../timer/timer.zig");
 
 pub const Flash = struct {
     bytes: []u8,
@@ -21,6 +22,12 @@ pub const Flash = struct {
     pub fn deinit(self: *Flash, allocator: std.mem.Allocator) void {
         allocator.free(self.bytes);
         self.bytes = &[_]u8{};
+    }
+
+    pub fn initTest(allocator: std.mem.Allocator, size: usize, erased_byte: u8) !Flash {
+        const bytes = try allocator.alloc(u8, size);
+        @memset(bytes, erased_byte);
+        return .{ .bytes = bytes };
     }
 
     pub fn writeByte(self: *Flash, address: usize, value: u8) !void {
@@ -51,7 +58,8 @@ pub const Flash = struct {
 };
 
 pub const PeripheralBus = struct {
-    usart0: ?*usart_mod.Usart = null,
+    usarts: []?*usart_mod.Usart,
+    timers: []?*timer_mod.Timer,
 };
 
 pub const DataMemory = struct {
@@ -99,13 +107,26 @@ pub const DataMemory = struct {
     pub fn readByte(
         self: *DataMemory,
         address: u16,
+        cycles: u64,
         peripherals: ?*PeripheralBus,
     ) !u8 {
-        var value = try self.readRawByte(address);
+        const value = try self.readRawByte(address);
 
         if (peripherals) |bus| {
-            if (bus.usart0) |usart0| {
-                value = usart0.read(address, value);
+            for (bus.usarts) |maybe_usart| {
+                if (maybe_usart) |usart| {
+                    if (usart.handles(address)) {
+                        return usart.read(address, value, cycles);
+                    }
+                }
+            }
+
+            for (bus.timers) |maybe_timer| {
+                if (maybe_timer) |timer| {
+                    if (timer.handles(address)) {
+                        return timer.read(address, value, cycles);
+                    }
+                }
             }
         }
 
@@ -117,16 +138,31 @@ pub const DataMemory = struct {
         address: u16,
         value: u8,
         cycles: u64,
-        clock_hz: u64,
         peripherals: ?*PeripheralBus,
     ) !void {
-        try self.writeRawByte(address, value);
-
         if (peripherals) |bus| {
-            if (bus.usart0) |usart0| {
-                _ = usart0.write(address, value, cycles, clock_hz);
+            for (bus.usarts) |maybe_usart| {
+                if (maybe_usart) |usart| {
+                    if (usart.handles(address)) {
+                        if (usart.write(address, value, cycles)) {
+                            return;
+                        }
+                    }
+                }
+            }
+
+            for (bus.timers) |maybe_timer| {
+                if (maybe_timer) |timer| {
+                    if (timer.handles(address)) {
+                        if (timer.write(address, value, cycles)) {
+                            return;
+                        }
+                    }
+                }
             }
         }
+
+        try self.writeRawByte(address, value);
     }
 
     pub fn ioToDataAddress(self: *const DataMemory, io_address: u16) u16 {
@@ -136,9 +172,14 @@ pub const DataMemory = struct {
     pub fn readIoByte(
         self: *DataMemory,
         io_address: u16,
+        cycles: u64,
         peripherals: ?*PeripheralBus,
     ) !u8 {
-        return self.readByte(self.ioToDataAddress(io_address), peripherals);
+        return self.readByte(
+            self.ioToDataAddress(io_address),
+            cycles,
+            peripherals,
+        );
     }
 
     pub fn writeIoByte(
@@ -146,15 +187,75 @@ pub const DataMemory = struct {
         io_address: u16,
         value: u8,
         cycles: u64,
-        clock_hz: u64,
         peripherals: ?*PeripheralBus,
     ) !void {
         return self.writeByte(
             self.ioToDataAddress(io_address),
             value,
             cycles,
-            clock_hz,
             peripherals,
         );
     }
 };
+
+const testing = std.testing;
+const test_mcu = @import("../../mcu/atmega328p.zig");
+
+test "flash initTest allocates and fills" {
+    var flash = try Flash.initTest(testing.allocator, 64, 0xff);
+    defer flash.deinit(testing.allocator);
+    try testing.expectEqual(@as(usize, 64), flash.bytes.len);
+    try testing.expectEqual(@as(u8, 0xff), flash.bytes[0]);
+    try testing.expectEqual(@as(u8, 0xff), flash.bytes[63]);
+}
+
+test "flash writeByte and readByte" {
+    var flash = try Flash.initTest(testing.allocator, 64, 0xff);
+    defer flash.deinit(testing.allocator);
+    try flash.writeByte(10, 0x42);
+    try testing.expectEqual(@as(u8, 0x42), try flash.readByte(10));
+}
+
+test "flash readByte out of range" {
+    var flash = try Flash.initTest(testing.allocator, 8, 0xff);
+    defer flash.deinit(testing.allocator);
+    try testing.expectError(error.FlashAddressOutOfRange, flash.readByte(8));
+}
+
+test "flash writeByte out of range" {
+    var flash = try Flash.initTest(testing.allocator, 8, 0xff);
+    defer flash.deinit(testing.allocator);
+    try testing.expectError(error.FlashAddressOutOfRange, flash.writeByte(8, 0x00));
+}
+
+test "flash readWord" {
+    var flash = try Flash.initTest(testing.allocator, 64, 0xff);
+    defer flash.deinit(testing.allocator);
+    try flash.writeByte(0, 0x34);
+    try flash.writeByte(1, 0x12);
+    try testing.expectEqual(@as(u16, 0x1234), try flash.readWord(0));
+}
+
+test "data memory init and read write" {
+    var data = try DataMemory.init(testing.allocator, &test_mcu.spec);
+    defer data.deinit(testing.allocator);
+    try testing.expectEqual(@as(usize, 0x0900), data.bytes.len);
+    try testing.expectEqual(@as(u8, 0), try data.readRawByte(0x0100));
+    try data.writeRawByte(0x0100, 0xab);
+    try testing.expectEqual(@as(u8, 0xab), try data.readRawByte(0x0100));
+}
+
+test "data memory out of range" {
+    var data = try DataMemory.init(testing.allocator, &test_mcu.spec);
+    defer data.deinit(testing.allocator);
+    try testing.expectError(error.DataAddressOutOfRange, data.readRawByte(0x0900));
+    try testing.expectError(error.DataAddressOutOfRange, data.writeRawByte(0x0900, 0x00));
+}
+
+test "ioToDataAddress" {
+    var data = try DataMemory.init(testing.allocator, &test_mcu.spec);
+    defer data.deinit(testing.allocator);
+    try testing.expectEqual(@as(u16, 0x0023), data.ioToDataAddress(0x03));
+    try testing.expectEqual(@as(u16, 0x005f), data.ioToDataAddress(0x3f));
+}
+

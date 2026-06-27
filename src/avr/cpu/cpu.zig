@@ -1,14 +1,15 @@
 const std = @import("std");
 const memory = @import("../memory/memory.zig");
 const constants = @import("../constants/constants.zig");
-const timer = @import("../timer/timer.zig");
 const decode = @import("decode.zig");
 const board_spec = @import("../../board/spec.zig");
 const mcu_spec = @import("../../mcu/spec.zig");
 const gpio_mod = @import("../gpio/gpio.zig");
 const usart_mod = @import("../usart/usart.zig");
+const timer_mod = @import("../timer/timer.zig");
 
 const MaxUsarts = mcu_spec.MaxUsarts;
+const MaxTimers = mcu_spec.MaxTimers;
 
 pub const Cpu = struct {
     flash: *const memory.Flash,
@@ -19,8 +20,11 @@ pub const Cpu = struct {
     r: [32]u8 = [_]u8{0} ** 32,
     data: memory.DataMemory,
 
-    timer0: timer.Timer0,
+    timers: [MaxTimers]?timer_mod.Timer = [_]?timer_mod.Timer{null} ** MaxTimers,
     usarts: [MaxUsarts]?usart_mod.Usart = [_]?usart_mod.Usart{null} ** MaxUsarts,
+    usart_bus_entries: [MaxUsarts]?*usart_mod.Usart = [_]?*usart_mod.Usart{null} ** MaxUsarts,
+    timer_bus_entries: [MaxTimers]?*timer_mod.Timer = [_]?*timer_mod.Timer{null} ** MaxTimers,
+
     gpio: ?*gpio_mod.Gpio = null,
 
     pc: u32 = 0,
@@ -37,18 +41,24 @@ pub const Cpu = struct {
         if (board.mcu.usarts.len > MaxUsarts) {
             return error.TooManyUsarts;
         }
+        if (board.mcu.timers.len > MaxTimers) {
+            return error.TooManyTimers;
+        }
 
         var cpu = Cpu{
             .mcu = board.mcu,
             .board = board,
-            .timer0 = timer.Timer0.init(board.mcu),
             .data = data,
             .sp = board.mcu.sram.end,
             .flash = flash,
         };
 
         for (board.mcu.usarts, 0..) |usart_spec, i| {
-            cpu.usarts[i] = usart_mod.Usart.init(usart_spec);
+            cpu.usarts[i] = usart_mod.Usart.init(usart_spec, board.clock_hz);
+        }
+
+        for (board.mcu.timers, 0..) |*timer_spec, i| {
+            cpu.timers[i] = timer_mod.Timer.init(timer_spec);
         }
 
         try cpu.syncStackPointerRegisters();
@@ -60,13 +70,22 @@ pub const Cpu = struct {
         self.data.deinit(allocator);
     }
 
-    fn peripheralBus(_: *Cpu) memory.PeripheralBus {
+    fn peripheralBus(self: *Cpu) memory.PeripheralBus {
+        for (&self.usarts, 0..) |*maybe_usart, i| {
+            self.usart_bus_entries[i] = if (maybe_usart.*) |*usart| usart else null;
+        }
+
+        for (&self.timers, 0..) |*maybe_timer, i| {
+            self.timer_bus_entries[i] = if (maybe_timer.*) |*timer| timer else null;
+        }
+
         return .{
-            .usart0 = null,
+            .usarts = self.usart_bus_entries[0..],
+            .timers = self.timer_bus_entries[0..],
         };
     }
 
-    fn findUsartByAddress(self: *Cpu, address: u16) ?*usart_mod.Usart {
+    pub fn findUsartByAddress(self: *Cpu, address: u16) ?*usart_mod.Usart {
         for (&self.usarts) |*maybe_usart| {
             if (maybe_usart.*) |*usart| {
                 if (usart.handles(address)) {
@@ -82,7 +101,7 @@ pub const Cpu = struct {
         if (index >= self.usarts.len) return;
 
         if (self.usarts[index]) |*usart| {
-            usart.injectRxByte(value);
+            usart.injectRxByte(value, self.cycles);
         }
     }
 
@@ -144,12 +163,9 @@ pub const Cpu = struct {
             return;
         }
 
-        if (self.timer0.writeIo(address, value)) {
-            return;
-        }
-
         const old = try self.data.readRawByte(data_address);
-        try self.data.writeRawByte(data_address, value);
+        var bus = self.peripheralBus();
+        try self.data.writeByte(data_address, value, self.cycles, &bus);
 
         if (self.gpio) |gpio| {
             gpio.handleIoWrite(address, old, value);
@@ -173,14 +189,11 @@ pub const Cpu = struct {
             return self.sreg;
         }
 
-        if (self.timer0.readIo(address)) |value| {
-            return value;
-        }
-
         const io_address: u16 = @intCast(address);
         const data_address = self.data.ioToDataAddress(io_address);
 
-        return self.data.readRawByte(data_address);
+        var bus = self.peripheralBus();
+        return self.data.readByte(data_address, self.cycles, &bus);
     }
 
     pub fn readData(self: *Cpu, address: u16) !u8 {
@@ -199,17 +212,8 @@ pub const Cpu = struct {
             return self.sreg;
         }
 
-        if (self.timer0.readData(address)) |value| {
-            return value;
-        }
-
-        if (self.findUsartByAddress(address)) |usart| {
-            const raw = try self.data.readRawByte(address);
-            return usart.read(address, raw);
-        }
-
         var bus = self.peripheralBus();
-        return self.data.readByte(address, &bus);
+        return self.data.readByte(address, self.cycles, &bus);
     }
 
     pub fn writeData(self: *Cpu, address: u16, value: u8) !void {
@@ -232,22 +236,11 @@ pub const Cpu = struct {
             return;
         }
 
-        if (self.timer0.writeData(address, value)) {
-            return;
-        }
-
-        if (self.findUsartByAddress(address)) |usart| {
-            try self.data.writeRawByte(address, value);
-            _ = usart.write(address, value, self.cycles, self.board.clock_hz);
-            return;
-        }
-
         var bus = self.peripheralBus();
         try self.data.writeByte(
             address,
             value,
             self.cycles,
-            self.board.clock_hz,
             &bus,
         );
     }
@@ -426,7 +419,8 @@ pub const Cpu = struct {
             return error.InstructionDidNotAdvanceCycles;
         }
 
-        self.timer0.tick(elapsed);
+        self.tickTimers(elapsed);
+        self.tickUsarts();
 
         try self.serviceInterrupts();
     }
@@ -436,10 +430,14 @@ pub const Cpu = struct {
             return;
         }
 
-        if (self.timer0.overflowInterruptPending()) {
-            self.timer0.acceptOverflowInterrupt();
-            try self.fireInterrupt(self.mcu.vectors.timer0_ovf_word_addr);
-            return;
+        for (&self.timers) |*maybe_timer| {
+            if (maybe_timer.*) |*t| {
+                if (t.overflowInterruptPending()) {
+                    t.acceptOverflowInterrupt();
+                    try self.fireInterrupt(t.spec.ovf_vector_word_addr);
+                    return;
+                }
+            }
         }
 
         for (&self.usarts) |*maybe_usart| {
@@ -447,13 +445,19 @@ pub const Cpu = struct {
                 const ucsrb = self.data.readRawByte(usart.spec.ucsrb) catch 0;
 
                 // RX first: USART_RX vector has higher priority than UDRE.
-                if (usart.receiveCompleteInterruptPending(ucsrb)) {
+                if (usart.receiveCompleteInterruptPending(ucsrb, self.cycles)) {
                     try self.fireInterrupt(usart.spec.rx_vector_word_addr);
                     return;
                 }
 
-                if (usart.dataRegisterEmptyInterruptEnabled(ucsrb) and usart.dataRegisterEmpty()) {
+                if (usart.dataRegisterEmptyInterruptPending(ucsrb, self.cycles)) {
                     try self.fireInterrupt(usart.spec.udre_vector_word_addr);
+                    return;
+                }
+
+                if (usart.transmitCompleteInterruptPending(ucsrb, self.cycles)) {
+                    usart.acceptTransmitCompleteInterrupt();
+                    try self.fireInterrupt(usart.spec.tx_vector_word_addr);
                     return;
                 }
             }
@@ -469,7 +473,24 @@ pub const Cpu = struct {
 
         self.pc = vector_word;
         self.cycles += constants.Cycles.interrupt_entry;
-        self.timer0.tick(constants.Cycles.interrupt_entry);
+        self.tickTimers(constants.Cycles.interrupt_entry);
+        self.tickUsarts();
+    }
+
+    fn tickTimers(self: *Cpu, elapsed: u64) void {
+        for (&self.timers) |*maybe_timer| {
+            if (maybe_timer.*) |*t| {
+                t.tick(elapsed);
+            }
+        }
+    }
+
+    fn tickUsarts(self: *Cpu) void {
+        for (&self.usarts) |*maybe_usart| {
+            if (maybe_usart.*) |*usart| {
+                usart.tick(self.cycles);
+            }
+        }
     }
 
     fn stackPointerLow(self: *const Cpu) u8 {

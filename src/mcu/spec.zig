@@ -1,4 +1,5 @@
 pub const MaxUsarts = 4;
+pub const MaxTimers = 2;
 
 pub const McuKind = enum {
     atmega328p,
@@ -22,13 +23,6 @@ pub const IoSpec = struct {
     ddrb: usize,
     portb: usize,
 
-    tifr0: usize,
-    tccr0a: usize,
-    tccr0b: usize,
-    tcnt0: usize,
-    ocr0a: usize,
-    ocr0b: usize,
-
     spl: usize,
     sph: usize,
     sreg: usize,
@@ -45,41 +39,67 @@ pub const DataSpec = struct {
     pinb: u16,
     ddrb: u16,
     portb: u16,
-
-    tifr0: u16,
-    tccr0a: u16,
-    tccr0b: u16,
-    tcnt0: u16,
-    ocr0a: u16,
-    ocr0b: u16,
-    timsk0: u16,
 };
 
-pub const Timer0Spec = struct {
-    max: u8,
+pub const TimerWidth = enum {
+    bits8,
+    bits16,
+};
 
-    tov0_bit: u3,
-    ocf0a_bit: u3,
-    ocf0b_bit: u3,
+pub const TimerSpec = struct {
+    name: []const u8,
+    width: TimerWidth,
 
-    toie0_bit: u3,
-    ocie0a_bit: u3,
-    ocie0b_bit: u3,
+    // Data-space register addresses
+    tccra: ?u16 = null,
+    tccrb: ?u16 = null,
+    tccrc: ?u16 = null,
 
+    tcntl: ?u16 = null,
+    tcnth: ?u16 = null,
+
+    ocral: ?u16 = null,
+    ocrah: ?u16 = null,
+
+    ocrbl: ?u16 = null,
+    ocrbh: ?u16 = null,
+
+    icrl: ?u16 = null,
+    icrh: ?u16 = null,
+
+    timsk: ?u16 = null,
+    tifr: ?u16 = null,
+
+    // Clock select / prescaler config
     cs_mask: u8,
-
     stopped: u8,
-    prescale_1: u8,
-    prescale_8: u8,
-    prescale_64: u8,
-    prescale_256: u8,
-    prescale_1024: u8,
-};
 
-pub const VectorSpec = struct {
-    timer0_ovf_index: u16,
-    timer0_ovf_word_addr: u16,
-    timer0_ovf_byte_addr: u16,
+    prescale_1: ?u8 = null,
+    prescale_8: ?u8 = null,
+    prescale_32: ?u8 = null,
+    prescale_64: ?u8 = null,
+    prescale_128: ?u8 = null,
+    prescale_256: ?u8 = null,
+    prescale_1024: ?u8 = null,
+
+    // Counter range
+    max: u16,
+
+    // Overflow interrupt bits
+    tov_bit: u3,
+    toie_bit: u3,
+
+    // Optional compare interrupt bits
+    ocf_a_bit: ?u3 = null,
+    ocie_a_bit: ?u3 = null,
+
+    ocf_b_bit: ?u3 = null,
+    ocie_b_bit: ?u3 = null,
+
+    icf_bit: ?u3 = null,
+    icie_bit: ?u3 = null,
+
+    ovf_vector_word_addr: u16,
 };
 
 pub const UsartSpec = struct {
@@ -114,8 +134,7 @@ pub const McuSpec = struct {
     sram: SramSpec,
     io: IoSpec,
     data: DataSpec,
-    timer0: Timer0Spec,
-    vectors: VectorSpec,
+    timers: []const TimerSpec,
     gpio_ports: []const GpioPortSpec,
     usarts: []const UsartSpec,
 };
