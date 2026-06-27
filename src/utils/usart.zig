@@ -7,8 +7,8 @@ pub const TerminalMode = struct {
     original: std.posix.termios = undefined,
 
     pub fn enableRaw(self: *TerminalMode) !void {
-        if (std.c.isatty(std.posix.STDIN_FILENO) == 0) {
-            return;
+        if (!std.posix.isatty(std.posix.STDIN_FILENO)) {
+            return null;
         }
 
         self.original = try std.posix.tcgetattr(std.posix.STDIN_FILENO);
