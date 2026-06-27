@@ -252,4 +252,3 @@ pub const Timer = struct {
         self.last_ovf_cycle = total_cycles;
     }
 };
-

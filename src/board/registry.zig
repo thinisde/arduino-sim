@@ -14,4 +14,3 @@ pub fn parse(name: []const u8) ?board.BoardKind {
 }
 
 const std = @import("std");
-

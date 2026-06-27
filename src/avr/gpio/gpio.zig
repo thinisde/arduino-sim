@@ -123,4 +123,3 @@ pub const Gpio = struct {
         return @as(u8, 1) << bit;
     }
 };
-
