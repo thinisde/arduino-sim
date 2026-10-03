@@ -119,6 +119,16 @@ pub const Gpio = struct {
         return null;
     }
 
+    pub fn findAnalogPin(self: *const Gpio, port: mcu_spec.PortId, bit: u3) ?usize {
+        for (self.board.analog_pins, 0..) |pin, index| {
+            if (pin.port == port and pin.bit == bit) {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
     pub fn bitMask(bit: u3) u8 {
         return @as(u8, 1) << bit;
     }

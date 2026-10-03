@@ -30,5 +30,6 @@ pub const BoardSpec = struct {
     clock_hz: u32,
 
     digital_pins: []const Pin,
+    analog_pins: []const Pin,
     led_builtin: ?u8,
 };

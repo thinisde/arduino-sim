@@ -18,6 +18,25 @@ pub const digital_pins = [_]board.Pin{
     .{ .port = .B, .bit = 5 }, // D13
 };
 
+pub const analog_pins = [_]board.Pin{
+    .{
+        .port = .a,
+        .bit = 0,
+    },
+    .{
+        .port = .a,
+        .bit = 1,
+    },
+    .{
+        .port = .a,
+        .bit = 2,
+    },
+    .{
+        .port = .a,
+        .bit = 3,
+    },
+};
+
 pub const spec = board.BoardSpec{
     .kind = .arduino_uno,
     .name = "Arduino Uno",
@@ -31,5 +50,6 @@ pub const spec = board.BoardSpec{
     .exposed_usarts = &.{0},
 
     .digital_pins = &digital_pins,
+    .analog_pins = &analog_pins,
     .led_builtin = 13,
 };
